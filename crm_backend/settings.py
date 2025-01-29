@@ -34,13 +34,13 @@ DEBUG = False
 ALLOWED_HOSTS = [
     '34.131.86.189',
     'localhost',
-    'ivory-enigma-449205-u0.web.app',
-    'ivory-enigma-449205-u0.firebaseapp.com'
+    'https://bcrm121.web.app',
+    'https://bcrm121.firebaseapp.com'
 ]
 
 CORS_ALLOWED_ORIGINS = [
-    'https://ivory-enigma-449205-u0.web.app',
-    'https://ivory-enigma-449205-u0.firebaseapp.com'
+    'https://bcrm121.web.app',
+    'https://bcrm121.firebaseapp.com'
 ]
 
 # CORS_ALLOWED_ORIGINS = [
