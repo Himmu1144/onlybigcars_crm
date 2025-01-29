@@ -30,13 +30,46 @@ SECRET_KEY = 'django-insecure-foi!5dn7@lr-fvvu0f2454rx5l+wqv*#2)197!7%j*$g-(*z^5
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-ALLOWED_HOSTS = ['*']
-
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
+# ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = [
+    '34.131.86.189',
+    'localhost',
+    'ivory-enigma-449205-u0.web.app',
+    'ivory-enigma-449205-u0.firebaseapp.com'
 ]
 
+CORS_ALLOWED_ORIGINS = [
+    'https://ivory-enigma-449205-u0.web.app',
+    'https://ivory-enigma-449205-u0.firebaseapp.com'
+]
+
+# CORS_ALLOWED_ORIGINS = [
+#     "http://localhost:3000",
+# ]
+
+# CORS_ALLOW_CREDENTIALS = True
+
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
 
 # Application definition
 
