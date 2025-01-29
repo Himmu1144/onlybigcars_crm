@@ -73,8 +73,7 @@ MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
 ]
 
-# Enable compression and caching for Whitenoise
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
 
 ROOT_URLCONF = 'crm_backend.urls'
 
@@ -160,11 +159,19 @@ USE_TZ = True
 
 # Static files (CSS, JavaScript, etc.) are collected in this directory
 # Add STATIC_URL setting
+# Add STATIC_URL setting
 STATIC_URL = '/static/'
 
 # Add STATIC_ROOT setting
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
+# Optionally, you can also add:
+STATICFILES_DIRS = [
+    os.path.join(BASE_DIR, 'static'),
+]
+
+# Enable Whitenoise
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 

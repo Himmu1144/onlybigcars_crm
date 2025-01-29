@@ -16,6 +16,9 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.conf.urls.static import static
+
+from crm_backend import settings
 from .views import CustomAuthToken, CustomLogoutView
 
 urlpatterns = [
@@ -24,4 +27,8 @@ urlpatterns = [
     path('api/token/login/', CustomAuthToken.as_view(), name='api_token_auth'),
     path('api/token/logout/', CustomLogoutView.as_view(), name='api_token_logout'),
 ]
+
+
+if settings.DEBUG:
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
 
