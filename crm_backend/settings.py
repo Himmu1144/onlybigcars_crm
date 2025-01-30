@@ -71,6 +71,9 @@ CORS_ALLOW_HEADERS = [
     'x-requested-with',
 ]
 
+CORS_ALLOW_ALL_ORIGINS = True  # Temporary for development
+CORS_ALLOW_CREDENTIALS = True
+
 # Application definition
 
 INSTALLED_APPS = [
@@ -217,3 +220,24 @@ BASE_URL = "http://34.131.86.189/"
 # admin
 # user: obcadmin
 # pass: adminpass
+
+
+
+# nginx settings
+# server {
+#     server_name 34.131.86.189;
+
+#     location = /favicon.ico { access_log off; log_not_found off; }
+#     location /static/ {
+#         alias /home/django/CodingWithMitchChat/src/staticfiles/;  # Changed from root to alias
+#         expires 30d;
+#         access_log off;
+#     }
+
+#      location / {
+#         include proxy_params;
+#         proxy_pass http://unix:/run/gunicorn.sock;
+#     }
+
+
+# }
