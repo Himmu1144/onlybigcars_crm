@@ -39,22 +39,33 @@ ALLOWED_HOSTS = [
     'obc.work.gd'
 ]
 
+# CORS Configuration
 CORS_ALLOWED_ORIGINS = [
     'https://bcrm121.web.app',
-    'https://bcrm121.firebaseapp.com'
+    'https://bcrm121.firebaseapp.com',
 ]
 
-# CORS_ALLOWED_ORIGINS = [
-#     "http://localhost:3000",
-# ]
-
-# CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_METHODS = [...]
-CORS_ALLOW_HEADERS = [...]
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
 
-# Application definition
 
 INSTALLED_APPS = [
     'django.contrib.admin',
