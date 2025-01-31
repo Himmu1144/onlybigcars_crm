@@ -35,7 +35,8 @@ ALLOWED_HOSTS = [
     '34.131.86.189',
     'localhost',
     'https://bcrm121.web.app',
-    'https://bcrm121.firebaseapp.com'
+    'https://bcrm121.firebaseapp.com',
+    'obc.work.gd'
 ]
 
 CORS_ALLOWED_ORIGINS = [
