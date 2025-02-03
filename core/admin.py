@@ -22,7 +22,7 @@ class OrderAdmin(admin.ModelAdmin):
 
 @admin.register(Car)
 class CarAdmin(admin.ModelAdmin):
-    list_display = ['brand', 'model', 'year', 'customer', 'created_at']
+    list_display = ['brand', 'model', 'year', 'fuel', 'customer', 'created_at']
     search_fields = ['brand', 'model', 'reg_no', 'chasis_no']
     list_filter = ['brand', 'created_at']
 

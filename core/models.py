@@ -49,6 +49,7 @@ class Car(models.Model):
     brand = models.CharField(max_length=100)
     model = models.CharField(max_length=100)
     year = models.CharField(max_length=4)
+    fuel = models.CharField(max_length=1000,null=True, blank=True)
     variant = models.CharField(max_length=100, null=True, blank=True)
     chasis_no = models.CharField(max_length=100, null=True, blank=True)
     reg_no = models.CharField(max_length=50, null=True, blank=True)

@@ -21,13 +21,15 @@ def home_view(request):
      # Get 3 most recent leads
     page_number = request.GET.get('page', 1)
     recent_leads = Lead.objects.select_related('customer', 'profile', 'order').order_by('-created_at')
+    seq_num = Lead.objects.count() + 1
     
     pagination_data = paginate_leads(recent_leads, page_number)
     users = User.objects.all().values('id', 'username')
     users_data = list(users)
-
+    print('this is the seq num', seq_num)
     return Response({
         "message": "Recent Leads",
+        'seq_num': seq_num,
         **pagination_data,
         "users": list(users)
     })
@@ -104,6 +106,7 @@ def edit_form_submit(request):
                     brand=car_data.get('carBrand'),
                     model=car_data.get('carModel'),
                     year=car_data.get('year'),
+                    fuel=car_data.get('fuel'),
                     variant=car_data.get('variant'),
                     chasis_no=car_data.get('chasisNo'),
                     reg_no=car_data.get('regNo')
@@ -136,6 +139,7 @@ def edit_form_submit(request):
                 disposition=arrival_data['disposition'],
                 arrival_time=arrival_data['dateTime'] if arrival_data['dateTime'] else None,
                 products=table_data,
+                estimated_price=basic_data['total'],
                 # Workshop info
                 workshop_details=workshop_data,
                 ca_name=basic_data['caName'],
@@ -277,6 +281,7 @@ def update_lead(request, id):
     with transaction.atomic():
         try:
             lead = Lead.objects.get(lead_id=id)
+            car = lead.car
             print("Updating lead:", id)  # Debug print
             print("Request data:", request.data)  # Debug print
             
@@ -315,21 +320,21 @@ def update_lead(request, id):
             lead.workshop_details = workshop_data
             lead.ca_name = workshop_data.get('ca', lead.ca_name)
             lead.products = overview_data.get('tableData', lead.products)
+            lead.estimated_price = basic_data.get('total', lead.estimated_price)
             lead.save()
 
-            # Update cars if provided
-            if cars_data:
-                Car.objects.filter(customer=customer).delete()
-                for car_data in cars_data:
-                    Car.objects.create(
-                        customer=customer,
-                        brand=car_data.get('carBrand'),
-                        model=car_data.get('carModel'),
-                        year=car_data.get('year'),
-                        variant=car_data.get('variant'),
-                        reg_no=car_data.get('regNo'),
-                        chasis_no=car_data.get('chasisNo')
-                    )
+            if cars_data and car:
+                car_data = cars_data[0]
+                # Update existing car
+                Car.objects.filter(id=car.id).update(
+                    brand=car_data.get('carBrand'),
+                    model=car_data.get('carModel'),
+                    fuel=car_data.get('fuel'),
+                    year=car_data.get('year'),
+                    variant=car_data.get('variant'),
+                    reg_no=car_data.get('regNo'),
+                    chasis_no=car_data.get('chasisNo')
+                )
 
             # Return updated lead data
             formatted_lead = lead_format([lead])[0]
@@ -354,7 +359,17 @@ def lead_format(leads):
         'is_read':lead.is_read or False,
 
         'name': lead.customer.customer_name if lead.customer else 'NA',
-        'vehicle': 'NA',
+        'vehicle': f"{lead.car.brand} {lead.car.model} {lead.car.year}" if lead.car else 'NA',
+        'car': {
+            'brand': lead.car.brand if lead.car else '',
+            'model': lead.car.model if lead.car else '',
+            'fuel': lead.car.fuel if lead.car else '',
+            'variant': lead.car.variant if lead.car else '',
+            'year': lead.car.year if lead.car else '',
+            'chasis_no': lead.car.chasis_no if lead.car else '',
+            'reg_no': lead.car.reg_no if lead.car else ''
+        } if lead.car else None,
+
         'number': lead.customer.mobile_number if lead.customer else 'NA',
         'whatsapp_number': lead.customer.whatsapp_number if lead.customer else 'NA',
         'email': lead.customer.customer_email if lead.customer else 'NA',
@@ -372,8 +387,9 @@ def lead_format(leads):
         'lead_type': lead.lead_type or 'NA',
         'arrival_mode': lead.arrival_mode or 'NA',
         'disposition': lead.disposition or 'NA',
-        'arrival_time': lead.arrival_time.strftime("%b %d,%Y,%H:%M") if lead.arrival_time else 'NA',
+        'arrival_time': lead.arrival_time if isinstance(lead.arrival_time, str) else lead.arrival_time.isoformat() if lead.arrival_time else '',
         'products': lead.products or 'NA',
+        'estimated_price': lead.estimated_price or 'NA',
 
         'workshop_details': {
             'name': lead.workshop_details.get('name') if lead.workshop_details else '',
@@ -384,15 +400,15 @@ def lead_format(leads):
         } if lead.workshop_details else {},
 
         'orderId': lead.order.order_id if lead.order else 'NA',
-        'regNumber': 'NA',
+        'regNumber': lead.car.reg_no if lead.car else 'NA',
         'status': lead.lead_status or 'NA',
         'cceName': lead.cce_name or 'NA',
         'caName': lead.ca_name or 'NA',
         'cceComments': lead.cce_comments or 'NA',
         'caComments': lead.ca_comments or 'NA',
         # 'arrivalDate': lead.arrival_time.strftime("%b %d,%Y,%H:%M") if lead.arrival_time else 'NA',
-        'createdAt': lead.created_at.strftime("%b %d,%Y,%H:%M") if lead.created_at else 'NA',
-        'modifiedAt': lead.updated_at.strftime("%b %d,%Y,%H:%M") if lead.updated_at else 'NA'
+        'created_at': lead.created_at.isoformat() if lead.created_at else None,
+        'updated_at': lead.created_at.isoformat() if lead.created_at else None,
     } for lead in leads]
     return leads_data
 
