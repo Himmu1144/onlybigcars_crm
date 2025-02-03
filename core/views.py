@@ -21,8 +21,13 @@ def home_view(request):
      # Get 3 most recent leads
     page_number = request.GET.get('page', 1)
     recent_leads = Lead.objects.select_related('customer', 'profile', 'order').order_by('-created_at')
-    seq_num = Lead.objects.count() + 1
-    print('This is the seq num', seq_num)
+    last_lead = Lead.objects.order_by('-created_at').first()
+    if last_lead:
+        # Split the lead_id and get the last segment
+        seq_num = int(last_lead.lead_id.split('-')[-1]) + 1
+    else:
+        # If no leads exist, start with 1
+        seq_num = 1
     
     pagination_data = paginate_leads(recent_leads, page_number)
     users = User.objects.all().values('id', 'username')
@@ -436,7 +441,13 @@ def paginate_leads(leads_queryset, page_number, items_per_page=5):
 
 def generate_custom_lead_id(customer_number):
     # Get total leads count
-    total_leads = Lead.objects.count()
+    last_lead = Lead.objects.order_by('-created_at').first()
+    if last_lead:
+        # Split the lead_id and get the last segment
+        seq_num = int(last_lead.lead_id.split('-')[-1]) + 1
+    else:
+        # If no leads exist, start with 1
+        seq_num = 1
     # Format lead ID
-    lead_id = f"L-{customer_number}-{total_leads + 1}"
+    lead_id = f"L-{customer_number}-{seq_num}"
     return lead_id
