@@ -22,6 +22,7 @@ def home_view(request):
     page_number = request.GET.get('page', 1)
     recent_leads = Lead.objects.select_related('customer', 'profile', 'order').order_by('-created_at')
     seq_num = Lead.objects.count() + 1
+    print('This is the seq num', seq_num)
     
     pagination_data = paginate_leads(recent_leads, page_number)
     users = User.objects.all().values('id', 'username')
