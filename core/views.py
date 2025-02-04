@@ -493,6 +493,8 @@ def create_lead_from_wordpress(request):
              # Generate custom lead ID
             custom_lead_id = generate_custom_lead_id(customer.mobile_number)
 
+            dummy_table_data = [{"name": "Service Name", "type": "Service Type", "total": "0", "workdone": "wordone", "determined": False},]
+
             # Create lead
             lead = Lead.objects.create(
                 lead_id=custom_lead_id,
@@ -500,6 +502,7 @@ def create_lead_from_wordpress(request):
                 car=car,
                 # source='Website',
                 source='Reference',
+                products=dummy_table_data,
                 service_type=data.get('service_type', ''),
                 lead_status=' '
             )
@@ -508,7 +511,7 @@ def create_lead_from_wordpress(request):
 
             return Response({
                 'status': 'success',
-                # 'lead_id': lead.lead_id
+                'lead_id': lead.lead_id
             }, status=status.HTTP_201_CREATED)
 
     except Exception as e:
@@ -516,3 +519,5 @@ def create_lead_from_wordpress(request):
             'status': 'error',
             'message': str(e)
         }, status=status.HTTP_400_BAD_REQUEST)
+    
+    
