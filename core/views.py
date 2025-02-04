@@ -465,6 +465,7 @@ def create_lead_from_wordpress(request):
             print('Received the 8888888888888888888888888888888888888 data:', data)
             car_details = data.get('car_details', {})
             user_number = data.get('user_number')
+            city = data.get('city')
 
             # # Create or get customer
             customer, created = Customer.objects.get_or_create(
@@ -518,6 +519,7 @@ def create_lead_from_wordpress(request):
                     lead_id=custom_lead_id,
                     customer=customer,
                     car=car,
+                    city=city,
                     profile=least_busy_profile,
                     # source='Website',
                     source='Reference',
