@@ -466,26 +466,38 @@ def create_lead_from_wordpress(request):
             # # Create or get customer
             customer, created = Customer.objects.get_or_create(
                 mobile_number=user_number,
-                defaults={'customer_name': 'WordPress Lead'}
+                defaults={'customer_name': 'Customer'}
             )
 
-            # # Create car
-            # car = Car.objects.create(
-            #     customer=customer,
-            #     brand=car_details.get('car_name', '').strip(),
-            #     model=car_details.get('car_model', '').strip(),
-            #     year=car_details.get('car_year', ''),
-            #     fuel=car_details.get('fuel_type', '')
-            # )
+            # Check if the car already exists for this customer
+            car_exists = Car.objects.filter(
+                customer=customer,
+                brand=car_details.get('car_name', '').strip(),
+                model=car_details.get('car_model', '').strip()
+            ).exists()
 
-            # # Create lead
-            # lead = Lead.objects.create(
-            #     customer=customer,
-            #     car=car,
-            #     source='WordPress Website',
-            #     service_type=data.get('service_type', ''),
-            #     lead_status='New'
-            # )
+            # Create car
+            if not car_exists:
+                car = Car.objects.create(
+                    customer=customer,
+                    brand=car_details.get('car_name', '').strip(),
+                    model=car_details.get('car_model', '').strip(),
+                    year=car_details.get('car_year', ''),
+                    fuel=car_details.get('fuel_type', '')
+                )
+
+             # Generate custom lead ID
+            custom_lead_id = generate_custom_lead_id(customer.mobile_number)
+
+            # Create lead
+            lead = Lead.objects.create(
+                lead_id=custom_lead_id,
+                customer=customer,
+                car=car,
+                source='Website',
+                service_type=data.get('service_type', ''),
+                lead_status=' '
+            )
 
             return Response({
                 'status': 'success',
