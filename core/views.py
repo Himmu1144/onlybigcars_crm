@@ -511,19 +511,27 @@ def create_lead_from_wordpress(request):
             print(f"Username: {least_busy_profile.user.username}")
             print(f"Lead Count: {least_busy_profile.lead_count}")
 
-            # Create lead
-            lead = Lead.objects.create(
-                lead_id=custom_lead_id,
-                customer=customer,
-                car=car,
-                profile=least_busy_profile,
-                # source='Website',
-                source='Reference',
-                products=dummy_table_data,
-                amount=0,
-                service_type=data.get('service_type', ''),
-                lead_status='Assigned',
-            )
+            try:
+                print('Creating lead')
+                # Create lead
+                lead = Lead.objects.create(
+                    lead_id=custom_lead_id,
+                    customer=customer,
+                    car=car,
+                    profile=least_busy_profile,
+                    # source='Website',
+                    source='Reference',
+                    products=dummy_table_data,
+                    amount=0,
+                    service_type=data.get('service_type', ''),
+                    lead_status='Assigned',
+                )
+            except Exception as e:
+                print('Error creating lead:', str(e))
+                return Response({
+                    'status': 'error',
+                    'message': 'Error creating lead'
+                }, status=status.HTTP_400_BAD_REQUEST)
 
             print(f'********** Lead - {lead} , Car - {car} **********, Customer - {customer}')
 
