@@ -451,3 +451,49 @@ def generate_custom_lead_id(customer_number):
     # Format lead ID
     lead_id = f"L-{customer_number}-{seq_num}"
     return lead_id
+
+
+@api_view(['POST'])
+def create_lead_from_wordpress(request):
+    try:
+        with transaction.atomic():
+            # Extract data from request
+            data = request.data
+            print('Received the 8888888888888888888888888888888888888 data:', data)
+            car_details = data.get('car_details', {})
+            user_number = data.get('user_number')
+
+            # # Create or get customer
+            customer, created = Customer.objects.get_or_create(
+                mobile_number=user_number,
+                defaults={'customer_name': 'WordPress Lead'}
+            )
+
+            # # Create car
+            # car = Car.objects.create(
+            #     customer=customer,
+            #     brand=car_details.get('car_name', '').strip(),
+            #     model=car_details.get('car_model', '').strip(),
+            #     year=car_details.get('car_year', ''),
+            #     fuel=car_details.get('fuel_type', '')
+            # )
+
+            # # Create lead
+            # lead = Lead.objects.create(
+            #     customer=customer,
+            #     car=car,
+            #     source='WordPress Website',
+            #     service_type=data.get('service_type', ''),
+            #     lead_status='New'
+            # )
+
+            return Response({
+                'status': 'success',
+                # 'lead_id': lead.lead_id
+            }, status=status.HTTP_201_CREATED)
+
+    except Exception as e:
+        return Response({
+            'status': 'error',
+            'message': str(e)
+        }, status=status.HTTP_400_BAD_REQUEST)

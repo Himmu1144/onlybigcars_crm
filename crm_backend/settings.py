@@ -43,6 +43,7 @@ ALLOWED_HOSTS = [
 CORS_ALLOWED_ORIGINS = [
     'https://bcrm121.web.app',
     'https://bcrm121.firebaseapp.com',
+    'https://onlybigcars.com',
 ]
 
 CORS_ALLOW_CREDENTIALS = True
