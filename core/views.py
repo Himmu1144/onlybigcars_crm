@@ -470,14 +470,14 @@ def create_lead_from_wordpress(request):
             )
 
             # Check if the car already exists for this customer
-            car_exists = Car.objects.filter(
+            car = Car.objects.filter(
                 customer=customer,
                 brand=car_details.get('car_name', '').strip(),
                 model=car_details.get('car_model', '').strip()
             ).exists()
 
             # Create car
-            if not car_exists:
+            if not car:
                 car = Car.objects.create(
                     customer=customer,
                     brand=car_details.get('car_name', '').strip(),
