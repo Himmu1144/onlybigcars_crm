@@ -18,7 +18,7 @@ class OrderAdmin(admin.ModelAdmin):
     list_display = ['order_id', 'customer', 'profile', 'created_at']
     search_fields = ['order_id', 'customer__customer_name']
     list_filter = ['created_at']
-    filter_horizontal = ['leads']
+    # Removed filter_horizontal = ['leads'] since the field doesn't exist anymore
 
 @admin.register(Car)
 class CarAdmin(admin.ModelAdmin):
@@ -33,7 +33,7 @@ class LeadAdmin(admin.ModelAdmin):
     list_filter = ['lead_status', 'lead_type', 'city', 'created_at']
     fieldsets = (
         ('Relationships', {
-            'fields': ('customer', 'profile', 'order','car')
+            'fields': ('customer', 'profile', 'order', 'car')
         }),
         ('Basic Info', {
             'fields': ('lead_id', 'source', 'service_type', 'lead_type', 'estimated_price', 'products', 'ca_name', 'cce_name', 'ca_comments', 'cce_comments')
@@ -48,4 +48,4 @@ class LeadAdmin(admin.ModelAdmin):
             'fields': ('workshop_details',)
         })
     )
-    readonly_fields = ('lead_id',)  # Make lead_id read-only in admin
+    readonly_fields = ('lead_id',)

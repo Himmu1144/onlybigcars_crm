@@ -12,8 +12,9 @@ from rest_framework import status
 from django.db import transaction
 from .models import Customer, Lead, Profile, Order, Car
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+from django.db.models import Count
 
-from core import models
+
 
 
 @api_view(['GET'])
@@ -497,16 +498,25 @@ def create_lead_from_wordpress(request):
 
             dummy_table_data = [{"name": "Service Name", "type": "Service Type", "total": "0", "workdone": "wordone", "determined": False},]
 
-            # here fetch the user that has least number of leads
-            # Fetch the profile with the least number of leads
-            profile = Profile.objects.annotate(num_leads=models.Count('profile_leads')).order_by('num_leads').first()
+            
+            profiles = Profile.objects.annotate(lead_count=Count('profile_leads')).order_by('lead_count')
+    
+            print("\n--- All Profiles with Lead Counts ---")
+            for profile in profiles:
+                print(f"Profile: {profile.user.username}, Lead Count: {profile.lead_count}")
+    
+            # Get profile with least leads
+            least_busy_profile = profiles.first()
+            print("\n--- Profile with Least Leads ---")
+            print(f"Username: {least_busy_profile.user.username}")
+            print(f"Lead Count: {least_busy_profile.lead_count}")
 
             # Create lead
             lead = Lead.objects.create(
                 lead_id=custom_lead_id,
                 customer=customer,
                 car=car,
-                profile=profile,
+                profile=least_busy_profile,
                 # source='Website',
                 source='Reference',
                 products=dummy_table_data,

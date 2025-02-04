@@ -5,8 +5,8 @@ from django.contrib.auth.models import User
 class Profile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     status = models.CharField(max_length=100, null=True, blank=True)
-    leads = models.ManyToManyField('Lead', blank=True, related_name='assigned_profiles')
-    orders = models.ManyToManyField('Order', blank=True, related_name='assigned_profiles')
+    # leads = models.ManyToManyField('Lead', blank=True, related_name='assigned_profiles')
+    # orders = models.ManyToManyField('Order', blank=True, related_name='assigned_profiles')
     
     class Meta:
         constraints = [
@@ -33,7 +33,7 @@ class Order(models.Model):
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='customer_orders')
     profile = models.ForeignKey(Profile, on_delete=models.SET_NULL, null=True, related_name='profile_orders')
     order_details = models.JSONField(null=True, blank=True)
-    leads = models.ManyToManyField('Lead', blank=True, related_name='related_orders')
+    # leads = models.ManyToManyField('Lead', blank=True, related_name='related_orders')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
