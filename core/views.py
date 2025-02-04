@@ -469,12 +469,16 @@ def create_lead_from_wordpress(request):
                 defaults={'customer_name': 'Customer'}
             )
 
+            print('Customer - ', customer)
+
             # Check if the car already exists for this customer
             car = Car.objects.filter(
                 customer=customer,
                 brand=car_details.get('car_name', '').strip(),
                 model=car_details.get('car_model', '').strip()
-            ).exists()
+            ).first()
+
+
 
             # Create car
             if not car:
@@ -499,6 +503,8 @@ def create_lead_from_wordpress(request):
                 service_type=data.get('service_type', ''),
                 lead_status=' '
             )
+
+            print(f'********** Lead - {lead} , Car - {car} **********, Customer - {customer}')
 
             return Response({
                 'status': 'success',
