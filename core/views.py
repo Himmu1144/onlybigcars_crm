@@ -327,7 +327,7 @@ def update_lead(request, id):
             lead.disposition = arrival_data.get('disposition', lead.disposition)
             lead.arrival_time = arrival_data.get('dateTime', lead.arrival_time)
             lead.workshop_details = workshop_data
-            lead.ca_name = workshop_data.get('ca', lead.ca_name)
+            lead.ca_name = basic_data.get('caName', lead.ca_name)
             lead.products = overview_data.get('tableData', lead.products)
             lead.estimated_price = basic_data.get('total', lead.estimated_price)
             lead.save()
