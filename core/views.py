@@ -522,7 +522,7 @@ def create_lead_from_wordpress(request):
                     # source='Website',
                     source='Reference',
                     products=dummy_table_data,
-                    amount=0,
+                    estimated_price=0,
                     service_type=data.get('service_type', ''),
                     lead_status='Assigned',
                 )
