@@ -525,6 +525,7 @@ def create_lead_from_wordpress(request):
                     estimated_price=0,
                     service_type=data.get('service_type', ''),
                     lead_status='Assigned',
+                    cce_name=least_busy_profile.user.username,
                 )
             except Exception as e:
                 print('Error creating lead:', str(e))
