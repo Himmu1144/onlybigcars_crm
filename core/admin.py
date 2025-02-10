@@ -1,5 +1,22 @@
 from django.contrib import admin
 from .models import Profile, Customer, Order, Lead, Car
+from .models import  CarBrand, CarModel
+from .models import Garage
+
+class CarModelInline(admin.TabularInline):
+    model = CarModel
+    extra = 1
+
+@admin.register(CarBrand)
+class CarBrandAdmin(admin.ModelAdmin):
+    list_display = ['name', 'created_at', 'updated_at']
+    inlines = [CarModelInline]
+
+@admin.register(CarModel)
+class CarModelAdmin(admin.ModelAdmin):
+    list_display = ['name', 'brand', 'created_at', 'updated_at']
+    list_filter = ['brand']
+    search_fields = ['name', 'brand__name']
 
 @admin.register(Profile)
 class ProfileAdmin(admin.ModelAdmin):
@@ -49,3 +66,12 @@ class LeadAdmin(admin.ModelAdmin):
         })
     )
     readonly_fields = ('lead_id',)
+
+
+@admin.register(Garage)
+class GarageAdmin(admin.ModelAdmin):
+    list_display = ('name', 'mechanic', 'mobile', 'is_active', 'created_at')
+    list_filter = ('is_active', 'created_at')
+    search_fields = ('name', 'mechanic', 'locality', 'mobile')
+    ordering = ('-created_at',)
+    list_per_page = 20

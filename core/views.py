@@ -14,6 +14,16 @@ from .models import Customer, Lead, Profile, Order, Car
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.db.models import Count
 
+from .models import CarBrand
+from .serializers import CarBrandSerializer
+
+from .models import Garage
+from .serializers import GarageSerializer
+
+from django.utils import timezone
+from datetime import datetime, timedelta
+import pytz
+
 
 
 
@@ -222,6 +232,7 @@ def edit_form_submit(request):
 @permission_classes([IsAuthenticated])
 def filter_leads(request):
     filter_data = request.data
+    print('This is the submitted filter data', filter_data)
     page_number = request.data.get('page', 1)
     query = Lead.objects.all()
     
@@ -240,6 +251,44 @@ def filter_leads(request):
         query = query.filter(customer__language_barrier=True)
     if filter_data.get('arrivalMode'):
         query = query.filter(arrival_mode=filter_data['arrivalMode'])
+    if filter_data.get('dateRange'):
+        start_date = filter_data['dateRange'].get('startDate')
+        end_date = filter_data['dateRange'].get('endDate')
+        if start_date and end_date:
+            # Convert strings to datetime objects
+            start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+            end_dt = datetime.strptime(end_date, '%Y-%m-%d')
+            
+            # Add one day to end date to include full day
+            start_dt = start_dt + timedelta(days=1)
+            end_dt = end_dt + timedelta(days=2)
+            
+            # Make timezone aware
+            start_dt = timezone.make_aware(start_dt)
+            end_dt = timezone.make_aware(end_dt)
+            
+            # Debug prints
+            print('Date Range Filter:')
+            print(f'Start Date: {start_dt}')
+            print(f'End Date: {end_dt}')
+            
+            query = query.filter(created_at__range=[start_dt, end_dt])
+            
+            # Verify results
+            print(f'Number of leads found: {query.count()}')
+            print('Sample of leads:')
+            for lead in query:
+                print(f'Lead ID: {lead.id}, Created At: {lead.created_at}')
+    # if filter_data.get('dateRange'):
+    #     start_date = filter_data['dateRange'].get('startDate')
+    #     end_date = filter_data['dateRange'].get('endDate')
+    #     if start_date and end_date:
+    #         # Convert to timezone-aware datetime objects
+    #         start_dt = timezone.make_aware(datetime.fromisoformat(start_date.replace('Z', '')))
+    #         end_dt = timezone.make_aware(datetime.fromisoformat(end_date.replace('Z', '')))
+            
+    #         query = query.filter(created_at__range=(start_dt, end_dt))
+    
         
     # Car type filter (luxury/normal)
     if filter_data.get('luxuryNormal'):
@@ -398,7 +447,7 @@ def lead_format(leads):
         'disposition': lead.disposition or 'NA',
         'arrival_time': lead.arrival_time if isinstance(lead.arrival_time, str) else lead.arrival_time.isoformat() if lead.arrival_time else '',
         'products': lead.products or 'NA',
-        'estimated_price': lead.estimated_price or 'NA',
+        'estimated_price': lead.estimated_price or 0,
 
         'workshop_details': {
             'name': lead.workshop_details.get('name') if lead.workshop_details else '',
@@ -482,8 +531,6 @@ def create_lead_from_wordpress(request):
                 model=car_details.get('car_model', '').strip()
             ).first()
 
-
-
             # Create car
             if not car:
                 car = Car.objects.create(
@@ -512,6 +559,8 @@ def create_lead_from_wordpress(request):
             print(f"Username: {least_busy_profile.user.username}")
             print(f"Lead Count: {least_busy_profile.lead_count}")
 
+            
+            
             try:
                 print('Creating lead')
                 # Create lead
@@ -549,4 +598,49 @@ def create_lead_from_wordpress(request):
             'message': str(e)
         }, status=status.HTTP_400_BAD_REQUEST)
     
+@api_view(['GET'])
+def get_car_data(request):
+    brands = CarBrand.objects.prefetch_related('models').all()
+    serializer = CarBrandSerializer(brands, many=True)
+    return Response(serializer.data)
     
+@api_view(['GET', 'POST'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def garage_list(request):
+    if request.method == 'GET':
+        garages = Garage.objects.filter(is_active=True)
+        serializer = GarageSerializer(garages, many=True)
+        return Response(serializer.data)
+
+    elif request.method == 'POST':
+        serializer = GarageSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['GET', 'PUT', 'DELETE'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def garage_detail(request, pk):
+    try:
+        garage = Garage.objects.get(pk=pk)
+    except Garage.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == 'GET':
+        serializer = GarageSerializer(garage)
+        return Response(serializer.data)
+
+    elif request.method == 'PUT':
+        serializer = GarageSerializer(garage, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    elif request.method == 'DELETE':
+        garage.is_active = False
+        garage.save()
+        return Response(status=status.HTTP_204_NO_CONTENT)

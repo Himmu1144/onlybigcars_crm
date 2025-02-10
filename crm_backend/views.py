@@ -36,3 +36,89 @@ class CustomLogoutView(APIView):
     def post(self, request):
         request.auth.delete()
         return Response(status=status.HTTP_200_OK)
+
+
+
+# Name:                                     hjh
+# Number:                            7777777777
+# Car Details:              Ferrari FF 2022 CNG
+# Chasis Number:                            N/A
+# Registration No:                          N/A
+
+# Arrival Mode:                          Pickup
+# Arrival Time:                2025-02-04T18:02
+
+# Address:
+# Indiranagar, Bengaluru, Karnataka            
+
+# Map Link:  
+# https://maps.app.goo.gl/88TjUpZ6GBfj2iYj9
+
+# Work Summary:
+
+# Comprehensive Service hbjsadjasjdjgsahgdgsadhg
+# Engine Oil Change d ahsdjasdhbhsabdsajdjsajjds
+# Brake Fluid Top-up udhsadjbasjbdhbashdbhsabhdb
+           
+# Total Amount:                           ₹1545
+
+# Workshop Name:                            N/A
+# Lead Status:                         Assigned
+# Lead Source:                          Website
+
+# Lead ID:                      L-7777777777-29
+
+
+# Name:                                     hjh
+# Number:                            7777777777
+# Car Details:              Ferrari FF 2022 CNG
+# Chasis Number:                            N/A
+# Registration No:                          N/A
+
+# Arrival Mode:                          Pickup
+# Arrival Time:                2025-02-04T18:02
+# Address:            Indiranagar, Bengaluru, Karnataka
+
+
+# Work Summary:           Comprehensive Service
+# Total Amount:                           ₹1545
+
+# Workshop Name:                            N/A
+# Lead Status:                         Assigned
+# Lead Source:                          Website
+
+# Lead ID:                      L-7777777777-29
+
+
+
+
+# Name:                            jay malhotra
+# Number:                            7777777777
+# Car:        Land Rover Discovery Sport 2022 Petrol
+# Chasis No:             267167676725352145
+# Reg No:                   2671676774
+
+# Arrival Mode:                          Pickup
+# Arrival Time:                2025-02-0 18:02
+
+# Address:            
+# Indiranagar, Bengaluru, Karnataka
+
+# Map Link:           
+# https://maps.app.goo.gl/88TjUpZ6GBfj2iYj9
+
+# Work Summary:       
+# Comprehensive Service, Standard Service, 
+# Basic Service
+
+# Total Amount:                          ₹13715
+
+# Workshop Name:                           
+# Onlybigcars - Motor Masters, jahangirpuri
+
+# Lead Status:                         Assigned
+# Lead Source:                          Website
+
+# Lead ID:                      
+# L-7777777777-29
+

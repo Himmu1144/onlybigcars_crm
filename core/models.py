@@ -88,7 +88,7 @@ class Lead(models.Model):
     state = models.CharField(max_length=100, null=True, blank=True)
     building = models.CharField(max_length=200, null=True, blank=True)
     landmark = models.CharField(max_length=200, null=True, blank=True)
-    map_link = models.CharField(max_length=50, null=True, blank=True)
+    map_link = models.CharField(max_length=200, null=True, blank=True)
 
     # Status and Timing
     lead_status = models.CharField(max_length=100, null=True, blank=True)
@@ -110,4 +110,44 @@ class Lead(models.Model):
 
     def __str__(self):
         return f"Lead {self.lead_id}"
+    
+# updated some code here
+class CarBrand(models.Model):
+    name= models.CharField(max_length=100, unique= True)
+    created_at = models.DateTimeField(auto_now_add = True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__ (self):
+        return self.name
+    
+class CarModel(models.Model):
+    brand = models.ForeignKey(CarBrand, on_delete=models.CASCADE, related_name='models')
+    name = models.CharField(max_length=100)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ['brand', 'name']
+
+    def __str__(self):
+        return f"{self.brand.name} - {self.name}"
+    
+class Garage(models.Model):
+    name = models.CharField(max_length=200)
+    mechanic = models.CharField(max_length=100)
+    locality = models.TextField()
+    link = models.URLField(blank=True, null=True)
+    mobile = models.CharField(max_length=20)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Garage'
+        verbose_name_plural = 'Garages'
+
+    def __str__(self):
+        return self.name
+
 
