@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Profile, Customer, Order, Lead, Car
+from .models import Profile, Customer, Order, Lead, Car, CarBrand, CarModel
 from .models import  CarBrand, CarModel
 from .models import Garage
 
@@ -32,8 +32,8 @@ class CustomerAdmin(admin.ModelAdmin):
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
-    list_display = ['order_id', 'customer', 'profile', 'created_at']
-    search_fields = ['order_id', 'customer__customer_name']
+    list_display = ['order_id', 'created_at']
+    search_fields = ['order_id',]
     list_filter = ['created_at']
     # Removed filter_horizontal = ['leads'] since the field doesn't exist anymore
 
@@ -66,6 +66,7 @@ class LeadAdmin(admin.ModelAdmin):
         })
     )
     readonly_fields = ('lead_id',)
+
 
 
 @admin.register(Garage)

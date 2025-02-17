@@ -25,8 +25,6 @@ from datetime import datetime, timedelta
 import pytz
 
 
-
-
 @api_view(['GET'])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -52,7 +50,6 @@ def home_view(request):
         **pagination_data,
         "users": list(users)
     })
-
 
 
 @api_view(['GET'])
@@ -168,6 +165,26 @@ def edit_form_submit(request):
                 # Store other data
                 # products=table_data
             )
+
+            # try:
+
+            #     # Create order if lead status is Complete
+            #     if arrival_data['leadStatus'].lower() == 'completed':
+            #         # Check if lead already has an order
+            #         if not hasattr(lead, 'order') or lead.order is None:
+            #             print('This lead does not have any order as of yet.')
+            #             order_id = generate_order_id(customer_data['mobileNumber'])
+            #             order = Order.objects.create(
+            #                 order_id=order_id,
+            #             )
+                        
+            #             # Update lead with order reference
+            #             lead.order = order
+            #             lead.save()
+
+            # except Exception as e:
+            #     print('Error saving data:', str(e))
+
 
             return Response({
                 "message": "Data saved successfully",
@@ -380,6 +397,26 @@ def update_lead(request, id):
             lead.products = overview_data.get('tableData', lead.products)
             lead.estimated_price = basic_data.get('total', lead.estimated_price)
             lead.save()
+
+            # try:
+
+            #     # Create order if lead status is Complete
+            #     if arrival_data['leadStatus'].lower() == 'completed':
+            #         # Check if lead already has an order
+            #         if not hasattr(lead, 'order') or lead.order is None:
+            #             print('This lead does not have any order-')
+            #             order_id = generate_order_id(customer_data['mobileNumber'])
+            #             order = Order.objects.create(
+            #                 order_id=order_id,
+            #             )
+                        
+            #             # Update lead with order reference
+            #             lead.order = order
+            #             lead.save()
+
+            # except Exception as e:
+            #     print('Error saving data:', str(e))
+
 
             if cars_data and car:
                 car_data = cars_data[0]
@@ -644,3 +681,24 @@ def garage_detail(request, pk):
         garage.is_active = False
         garage.save()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+
+def generate_order_id(mobile_number):
+    """Generate order ID in format: YYxxxxMMDDHHmm"""
+    # Get current time in Asia/Kolkata timezone
+    ist = pytz.timezone('Asia/Kolkata')
+    now = timezone.now().astimezone(ist)
+    
+    year = now.strftime('%y')  # Last 2 digits of year
+    month = now.strftime('%m')
+    day = now.strftime('%d')
+    hour = now.strftime('%H')
+    minute = now.strftime('%M')
+    
+    # Get last 4 digits of mobile number
+    last_four = mobile_number[-4:] if len(mobile_number) >= 4 else mobile_number.zfill(4)
+    
+    # Combine all parts
+    order_id = f"{year}{last_four}{month}{day}{hour}{minute}"
+    return order_id

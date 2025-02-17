@@ -30,9 +30,9 @@ class Customer(models.Model):
 
 class Order(models.Model):
     order_id = models.CharField(max_length=100, unique=True)
-    customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='customer_orders')
-    profile = models.ForeignKey(Profile, on_delete=models.SET_NULL, null=True, related_name='profile_orders')
-    order_details = models.JSONField(null=True, blank=True)
+    # customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='customer_orders')
+    # profile = models.ForeignKey(Profile, on_delete=models.SET_NULL, null=True, related_name='profile_orders')
+    # order_details = models.JSONField(null=True, blank=True)
     # leads = models.ManyToManyField('Lead', blank=True, related_name='related_orders')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -40,9 +40,9 @@ class Order(models.Model):
     def __str__(self):
         return f"Order {self.order_id}"
 
-    def get_customers(self):
-        """Helper method to get related customers"""
-        return self.customers.all()
+    # def get_customers(self):
+    #     """Helper method to get related customers"""
+    #     return self.customers.all()
     
 class Car(models.Model):
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='cars')
@@ -70,6 +70,7 @@ class Lead(models.Model):
         default=generate_lead_id,
         editable=False
     )
+    
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='customer_leads')
     car = models.ForeignKey(Car, on_delete=models.SET_NULL, null=True, related_name='leads')
     profile = models.ForeignKey(Profile, on_delete=models.SET_NULL, null=True, related_name='profile_leads')
@@ -149,5 +150,4 @@ class Garage(models.Model):
 
     def __str__(self):
         return self.name
-
 
