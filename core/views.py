@@ -584,7 +584,8 @@ def create_lead_from_wordpress(request):
             dummy_table_data = [{"name": "Service Name", "type": "Service Type", "total": "0", "workdone": "wordone", "determined": False},]
 
             
-            profiles = Profile.objects.annotate(lead_count=Count('profile_leads')).order_by('lead_count')
+            # profiles = Profile.objects.annotate(lead_count=Count('profile_leads')).order_by('lead_count')
+            profiles = Profile.objects.filter(is_caller=True).annotate(lead_count=Count('profile_leads')).order_by('lead_count')
     
             print("\n--- All Profiles with Lead Counts ---")
             for profile in profiles:

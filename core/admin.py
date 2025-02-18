@@ -20,9 +20,9 @@ class CarModelAdmin(admin.ModelAdmin):
 
 @admin.register(Profile)
 class ProfileAdmin(admin.ModelAdmin):
-    list_display = ['user', 'status']
+    list_display = ['user', 'status', 'is_caller']
     search_fields = ['user__username', 'status']
-    list_filter = ['status']
+    list_filter = ['status','is_caller']
 
 @admin.register(Customer)
 class CustomerAdmin(admin.ModelAdmin):
