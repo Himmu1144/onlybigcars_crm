@@ -33,7 +33,7 @@ DEBUG = False
 # ALLOWED_HOSTS = ['*']
 ALLOWED_HOSTS = [
     '34.131.86.189',
-    'localhost',
+    # 'localhost',
     'https://bcrm121.web.app',
     'https://bcrm121.firebaseapp.com',
     'obc.work.gd'
