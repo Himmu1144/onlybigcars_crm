@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Profile, Customer, Order, Lead, Car, CarBrand, CarModel
+from .models import Profile, Customer, Order, Lead, Car, CarBrand, CarModel, UserStatus
 from .models import  CarBrand, CarModel
 from .models import Garage
 
@@ -18,6 +18,7 @@ class CarModelAdmin(admin.ModelAdmin):
     list_filter = ['brand']
     search_fields = ['name', 'brand__name']
 
+# 18 feb
 @admin.register(Profile)
 class ProfileAdmin(admin.ModelAdmin):
     list_display = ['user', 'status', 'is_caller']
@@ -59,20 +60,27 @@ class LeadAdmin(admin.ModelAdmin):
             'fields': ('address', 'city', 'state', 'building', 'landmark', 'map_link')
         }),
         ('Status', {
-            'fields': ('lead_status', 'arrival_mode', 'disposition', 'arrival_time', 'is_read')
-        }),
+            'fields': ('lead_status', 'arrival_mode', 'disposition', 'arrival_time', 'is_read', 'status_history', 'final_amount')
+        }), # 18 feb
         ('Workshop', {
             'fields': ('workshop_details',)
-        })
+        }),
+        ('Overview', {
+            'fields': ('discount', 'afterDiscountAmount', 'battery_feature', 'additional_work', 'fuel_status', 'speedometer_rd', 'inventory')
+        }),
     )
     readonly_fields = ('lead_id',)
 
 
+@admin.register(UserStatus)
+class UserStatusAdmin(admin.ModelAdmin):
+    list_display = ['user', 'status', 'timestamp']
+    search_fields = ['user__username', 'status']
+    list_filter = ['status', 'timestamp']
+    readonly_fields = ['timestamp', 'status_history']
 
-@admin.register(Garage)
-class GarageAdmin(admin.ModelAdmin):
-    list_display = ('name', 'mechanic', 'mobile', 'is_active', 'created_at')
-    list_filter = ('is_active', 'created_at')
-    search_fields = ('name', 'mechanic', 'locality', 'mobile')
-    ordering = ('-created_at',)
-    list_per_page = 20
+    fieldsets = (
+        (None, {
+            'fields': ('user', 'status', 'timestamp', 'status_history')
+        }),
+    )

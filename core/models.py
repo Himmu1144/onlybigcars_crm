@@ -5,7 +5,7 @@ from django.contrib.auth.models import User
 class Profile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     status = models.CharField(max_length=100, null=True, blank=True)
-    is_caller = models.BooleanField(default=False) 
+    is_caller = models.BooleanField(default=False) # 18feb
     # leads = models.ManyToManyField('Lead', blank=True, related_name='assigned_profiles')
     # orders = models.ManyToManyField('Order', blank=True, related_name='assigned_profiles')
     
@@ -81,6 +81,7 @@ class Lead(models.Model):
     source = models.CharField(max_length=100, null=True, blank=True)
     service_type = models.CharField(max_length=100, null=True, blank=True)
     products = models.JSONField(null=True, blank=True)
+    status_history = models.JSONField(null=True, blank=True) # 18 feb
     estimated_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     lead_type = models.CharField(max_length=50, null=True, blank=True)
 
@@ -91,12 +92,20 @@ class Lead(models.Model):
     building = models.CharField(max_length=200, null=True, blank=True)
     landmark = models.CharField(max_length=200, null=True, blank=True)
     map_link = models.CharField(max_length=200, null=True, blank=True)
+    discount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    afterDiscountAmount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
 
     # Status and Timing
     lead_status = models.CharField(max_length=100, null=True, blank=True)
     arrival_mode = models.CharField(max_length=100, null=True, blank=True)
     disposition = models.CharField(max_length=100, null=True, blank=True)
     arrival_time = models.DateTimeField(null=True, blank=True)
+    final_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    battery_feature = models.CharField(max_length=255, blank=True, null=True)
+    additional_work = models.TextField(blank=True, null=True)
+    fuel_status = models.CharField(max_length=255, blank=True, null=True)
+    speedometer_rd = models.CharField(max_length=255, blank=True, null=True)
+    inventory = models.TextField(blank=True, null=True)
 
     # Workshop Details
     workshop_details = models.JSONField(null=True, blank=True)
@@ -152,3 +161,17 @@ class Garage(models.Model):
     def __str__(self):
         return self.name
 
+class UserStatus(models.Model):
+    STATUS_CHOICES = [
+        ('Active', 'Active'),
+        ('Break', 'Break'),
+        ('offline', 'Offline')
+    ]
+    
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='offline')
+    timestamp = models.DateTimeField(auto_now=True)
+    status_history = models.JSONField(default=dict)  # To store status change history in a nested format
+
+    class Meta:
+        verbose_name_plural = 'User Statuses'

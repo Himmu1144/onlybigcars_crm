@@ -13,4 +13,7 @@ urlpatterns = [
     path('api/car-data/', views.get_car_data, name='car-data'),
     path('api/garages/', views.garage_list, name='garage-list'),
     path('api/garages/<int:pk>/', views.garage_detail, name='garage-detail'),
+    path('api/update-status/', views.update_user_status, name='update_user_status'),
+    path('api/user-status/', views.get_user_status, name='get_user_status'),
+    path('api/customers/<str:mobile_number>/', views.get_customer_by_mobile, name='get_customer_by_mobile'),#18-2
 ]

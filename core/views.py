@@ -10,7 +10,7 @@ from django.contrib.auth.models import User
 from rest_framework import status
 
 from django.db import transaction
-from .models import Customer, Lead, Profile, Order, Car
+from .models import Customer, Lead, Profile, Order, Car, UserStatus
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.db.models import Count
 
@@ -24,6 +24,90 @@ from django.utils import timezone
 from datetime import datetime, timedelta
 import pytz
 
+
+#  # Custom paginator function
+# def custom_paginate_leads(leads_queryset, page_number, items_per_page=5):
+#     total_leads = leads_queryset.count()
+#     paginator = Paginator(leads_queryset, items_per_page)
+    
+#     try:
+#         page_number = int(page_number)
+#         paginated_leads = paginator.page(page_number)
+#     except (PageNotAnInteger, ValueError):
+#         paginated_leads = paginator.page(1)
+#     except EmptyPage:
+#         paginated_leads = paginator.page(paginator.num_pages)
+    
+#     return {
+#         'leads': lead_format(paginated_leads),
+#         'total_pages': paginator.num_pages,
+#         'current_page': paginated_leads.number,
+#         'total_leads': total_leads,
+#         'leads_per_page': items_per_page
+#     }
+
+
+def custom_paginate_leads(leads_queryset, page_number, items_per_page=5):
+    """
+    Helper function to paginate leads queryset with additional validation
+    """
+    # print("\n=== PAGINATION DEBUGGING ===")
+    # print(f"Total leads before pagination: {leads_queryset.count()}")
+    # print(f"Requested page number: {page_number}")
+    
+    # Ensure we're working with a valid queryset
+    if not leads_queryset.exists():
+        return {
+            'leads': [],
+            'total_pages': 0,
+            'current_page': 1,
+            'total_leads': 0,
+            'leads_per_page': items_per_page
+        }
+
+    # Create paginator
+    paginator = Paginator(leads_queryset, items_per_page)
+    total_leads = leads_queryset.count()
+    total_pages = paginator.num_pages
+    
+    try:
+        # Convert page_number to integer and validate
+        page_number = int(page_number)
+        if page_number < 1:
+            page_number = 1
+        elif page_number > total_pages:
+            page_number = total_pages
+            
+        paginated_leads = paginator.page(page_number)
+        
+        # Verify the leads on current page
+        leads_on_page = list(paginated_leads)
+        print(f"Leads on page {page_number}:")
+        for lead in leads_on_page:
+            print(f"- Lead ID: {lead.lead_id}, User: {lead.profile.user.username}")
+            
+    except (PageNotAnInteger, ValueError):
+        print("Invalid page number, defaulting to page 1")
+        paginated_leads = paginator.page(1)
+        page_number = 1
+    except EmptyPage:
+        print(f"Page {page_number} is empty, showing last page")
+        paginated_leads = paginator.page(paginator.num_pages)
+        page_number = paginator.num_pages
+
+    result = {
+        'leads': lead_format(paginated_leads),
+        'total_pages': total_pages,
+        'current_page': page_number,
+        'total_leads': total_leads,
+        'leads_per_page': items_per_page
+    }
+    
+    # print(f"Returning {len(result['leads'])} leads for page {result['current_page']}")
+    # print(f"Total pages: {result['total_pages']}")
+    # print("=== END PAGINATION DEBUGGING ===\n")
+    
+    return result
 
 @api_view(['GET'])
 @authentication_classes([TokenAuthentication])
@@ -40,7 +124,8 @@ def home_view(request):
         # If no leads exist, start with 1
         seq_num = 1
     
-    pagination_data = paginate_leads(recent_leads, page_number)
+    # pagination_data = paginate_leads(recent_leads, page_number)
+    pagination_data = custom_paginate_leads(recent_leads, page_number)  # Using custom_paginate_leads here
     users = User.objects.all().values('id', 'username')
     users_data = list(users)
     print('this is the seq num', seq_num)
@@ -77,7 +162,8 @@ def search_leads(request):
         # if not leads.exists():
         #     leads = Lead.objects.filter(customer__mobile_number__icontains=query)
 
-    pagination_data = paginate_leads(leads, page_number)
+    # pagination_data = paginate_leads(leads, page_number)
+    pagination_data = custom_paginate_leads(leads, page_number)  # Using custom_paginate_leads here
     return Response({
         "message": "Search Results",
         **pagination_data
@@ -96,6 +182,7 @@ def edit_form_submit(request):
             # Extract data
             data = request.data
             table_data = data['overview']['tableData']
+            overview_data = data['overview']
             customer_data = request.data.get('customerInfo')
             cars_data = request.data.get('cars', [])
             location_data = request.data.get('location')
@@ -103,16 +190,24 @@ def edit_form_submit(request):
             arrival_data = request.data.get('arrivalStatus')
             basic_data = request.data.get('basicInfo')
 
-            # Create or get customer
-            customer, created = Customer.objects.get_or_create(
-                mobile_number=customer_data['mobileNumber'],
-                defaults={
-                    'customer_name': customer_data['customerName'],
-                    'whatsapp_number': customer_data['whatsappNumber'],
-                    'customer_email': customer_data['customerEmail'],
-                    'language_barrier': customer_data['languageBarrier']
-                }
-            )
+            # Check if customer exists
+            try:
+                customer = Customer.objects.get(mobile_number=customer_data['mobileNumber'])
+                # Update customer information
+                customer.customer_name = customer_data['customerName']
+                customer.whatsapp_number = customer_data['whatsappNumber']
+                customer.customer_email = customer_data['customerEmail']
+                customer.language_barrier = customer_data['languageBarrier']
+                customer.save()
+            except Customer.DoesNotExist:
+                # Create new customer
+                customer = Customer.objects.create(
+                    mobile_number=customer_data['mobileNumber'],
+                    customer_name=customer_data['customerName'],
+                    whatsapp_number=customer_data['whatsappNumber'],
+                    customer_email=customer_data['customerEmail'],
+                    language_barrier=customer_data['languageBarrier']
+                )
 
             # Save cars
             saved_car = None
@@ -133,6 +228,16 @@ def edit_form_submit(request):
 
              # Generate custom lead ID
             custom_lead_id = generate_custom_lead_id(customer_data['mobileNumber'])
+
+
+             # Initialize status history for new lead 18 feb
+            initial_status = arrival_data.get('leadStatus')
+            initial_status_history = [{
+                'status': initial_status,
+                'changed_by': request.user.username,
+                'timestamp': timezone.now().astimezone(pytz.timezone('Asia/Kolkata')).isoformat()
+            }] if initial_status else []
+
 
             # Create lead with user's profile
             lead = Lead.objects.create(
@@ -155,6 +260,8 @@ def edit_form_submit(request):
                 disposition=arrival_data['disposition'],
                 arrival_time=arrival_data['dateTime'] if arrival_data['dateTime'] else None,
                 products=table_data,
+                discount=overview_data['discount'],
+                afterDiscountAmount=overview_data['finalAmount'],
                 estimated_price=basic_data['total'],
                 # Workshop info
                 workshop_details=workshop_data,
@@ -162,28 +269,36 @@ def edit_form_submit(request):
                 cce_name=basic_data['cceName'],
                 ca_comments=basic_data['caComments'],
                 cce_comments=basic_data['cceComments'],
+                status_history=initial_status_history,  # Add initial status history
+                # Additional arrival
+                final_amount=arrival_data.get('finalAmount', 0),
+                battery_feature=arrival_data.get('batteryFeature', ''),
+                additional_work=arrival_data.get('additionalWork', ''),
+                fuel_status=arrival_data.get('fuelStatus', ''),
+                speedometer_rd=arrival_data.get('speedometerRd', ''),
+                inventory=arrival_data.get('inventory', ''),
                 # Store other data
                 # products=table_data
             )
 
-            # try:
+            try:
 
-            #     # Create order if lead status is Complete
-            #     if arrival_data['leadStatus'].lower() == 'completed':
-            #         # Check if lead already has an order
-            #         if not hasattr(lead, 'order') or lead.order is None:
-            #             print('This lead does not have any order as of yet.')
-            #             order_id = generate_order_id(customer_data['mobileNumber'])
-            #             order = Order.objects.create(
-            #                 order_id=order_id,
-            #             )
+                # Create order if lead status is Complete
+                if arrival_data['leadStatus'].lower() == 'job card':
+                    # Check if lead already has an order
+                    if not hasattr(lead, 'order') or lead.order is None:
+                        print('This lead does not have any order as of yet.')
+                        order_id = generate_order_id(customer_data['mobileNumber'])
+                        order = Order.objects.create(
+                            order_id=order_id,
+                        )
                         
-            #             # Update lead with order reference
-            #             lead.order = order
-            #             lead.save()
+                        # Update lead with order reference
+                        lead.order = order
+                        lead.save()
 
-            # except Exception as e:
-            #     print('Error saving data:', str(e))
+            except Exception as e:
+                print('Error saving data:', str(e))
 
 
             return Response({
@@ -244,89 +359,290 @@ def edit_form_submit(request):
     
 #     return Response({'leads': leads_data})
 
+
 @api_view(['POST'])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
 def filter_leads(request):
     filter_data = request.data
-    print('This is the submitted filter data', filter_data)
     page_number = request.data.get('page', 1)
-    query = Lead.objects.all()
+    
+    # Start with base queryset with all related fields
+    query = Lead.objects.select_related(
+        'customer', 
+        'car', 
+        'profile', 
+        'profile__user', 
+        'order'
+    ).all()
+    
+    print("\n=== FILTER DEBUGGING START ===")
+    print(f"Initial query count: {query.count()}")
+    print(f"Filter data received: {filter_data}")
     
     # User filter
     if filter_data.get('user'):
-        query = query.filter(profile__user__username=filter_data['user'])
+        username = filter_data['user']
+        print(f"\nApplying user filter for: {username}")
+        print("Before user filter count:", query.count())
+        # Debug current usernames in query
+        print("Current usernames in query:", list(query.values_list('profile__user__username', flat=True).distinct()))
+        
+        query = query.filter(profile__user__username=username)
+        print("After user filter count:", query.count())
+        # Verify filtered results
+        filtered_usernames = list(query.values_list('profile__user__username', flat=True).distinct())
+        print("Usernames after filter:", filtered_usernames)
+        if username not in filtered_usernames:
+            print(f"WARNING: Username {username} not found in filtered results!")
     
-    # Basic filters
+    # Source filter
     if filter_data.get('source'):
-        query = query.filter(source=filter_data['source'])
+        source = filter_data['source']
+        print(f"\nApplying source filter for: {source}")
+        print("Before source filter count:", query.count())
+        query = query.filter(source=source)
+        print("After source filter count:", query.count())
+        # Verify source values
+        sources = list(query.values_list('source', flat=True).distinct())
+        print("Sources in filtered results:", sources)
+    
+    # Status filter
     if filter_data.get('status'):
-        query = query.filter(lead_status=filter_data['status'])
+        status = filter_data['status']
+        print(f"\nApplying status filter for: {status}")
+        print("Before status filter count:", query.count())
+        query = query.filter(lead_status=status)
+        print("After status filter count:", query.count())
+        # Verify statuses
+        statuses = list(query.values_list('lead_status', flat=True).distinct())
+        print("Statuses in filtered results:", statuses)
+    
+    # Location filter
     if filter_data.get('location'):
-        query = query.filter(city=filter_data['location'])
+        location = filter_data['location']
+        print(f"\nApplying location filter for: {location}")
+        print("Before location filter count:", query.count())
+        query = query.filter(city=location)
+        print("After location filter count:", query.count())
+        # Verify cities
+        cities = list(query.values_list('city', flat=True).distinct())
+        print("Cities in filtered results:", cities)
+    
+    # Language barrier filter
     if filter_data.get('language_barrier'):
+        print("\nApplying language barrier filter")
+        print("Before language barrier filter count:", query.count())
         query = query.filter(customer__language_barrier=True)
+        print("After language barrier filter count:", query.count())
+    
+    # Arrival mode filter
     if filter_data.get('arrivalMode'):
-        query = query.filter(arrival_mode=filter_data['arrivalMode'])
-    if filter_data.get('dateRange'):
-        start_date = filter_data['dateRange'].get('startDate')
-        end_date = filter_data['dateRange'].get('endDate')
-        if start_date and end_date:
-            # Convert strings to datetime objects
-            start_dt = datetime.strptime(start_date, '%Y-%m-%d')
-            end_dt = datetime.strptime(end_date, '%Y-%m-%d')
-            
-            # Add one day to end date to include full day
-            start_dt = start_dt + timedelta(days=1)
-            end_dt = end_dt + timedelta(days=2)
-            
-            # Make timezone aware
-            start_dt = timezone.make_aware(start_dt)
-            end_dt = timezone.make_aware(end_dt)
-            
-            # Debug prints
-            print('Date Range Filter:')
-            print(f'Start Date: {start_dt}')
-            print(f'End Date: {end_dt}')
-            
-            query = query.filter(created_at__range=[start_dt, end_dt])
-            
-            # Verify results
-            print(f'Number of leads found: {query.count()}')
-            print('Sample of leads:')
-            for lead in query:
-                print(f'Lead ID: {lead.id}, Created At: {lead.created_at}')
+        mode = filter_data['arrivalMode']
+        print(f"\nApplying arrival mode filter for: {mode}")
+        print("Before arrival mode filter count:", query.count())
+        query = query.filter(arrival_mode=mode)
+        print("After arrival mode filter count:", query.count())
+    
+    # # Date range filter
     # if filter_data.get('dateRange'):
     #     start_date = filter_data['dateRange'].get('startDate')
     #     end_date = filter_data['dateRange'].get('endDate')
-    #     if start_date and end_date:
-    #         # Convert to timezone-aware datetime objects
-    #         start_dt = timezone.make_aware(datetime.fromisoformat(start_date.replace('Z', '')))
-    #         end_dt = timezone.make_aware(datetime.fromisoformat(end_date.replace('Z', '')))
-            
-    #         query = query.filter(created_at__range=(start_dt, end_dt))
-    
         
-    # Car type filter (luxury/normal)
-    if filter_data.get('luxuryNormal'):
-        query = query.filter(lead_type=filter_data['luxuryNormal'])
+    #     if start_date and end_date:
+    #         print(f"\nApplying date range filter: {start_date} to {end_date}")
+    #         print("Before date range filter count:", query.count())
+            
+    #         try:
+    #             # Convert strings to datetime objects
+    #             start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+    #             end_dt = datetime.strptime(end_date, '%Y-%m-%d')
+                
+    #             # Set time to start and end of day
+    #             start_dt = start_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    #             end_dt = end_dt.replace(hour=23, minute=59, second=59, microsecond=999999)
+                
+    #             # Make timezone aware
+    #             ist = pytz.timezone('Asia/Kolkata')
+    #             start_dt = timezone.make_aware(start_dt, ist)
+    #             end_dt = timezone.make_aware(end_dt, ist)
+                
+    #             query = query.filter(created_at__range=[start_dt, end_dt])
+    #             print("After date range filter count:", query.count())
+                
+    #             # Debug date range results
+    #             date_samples = list(query.values_list('created_at', flat=True)[:5])
+    #             print("Sample dates in results:", date_samples)
+                
+    #         except ValueError as e:
+    #             print(f"Date parsing error: {e}")
+    #             return Response({
+    #                 'error': 'Invalid date format. Please use YYYY-MM-DD format.'
+    #             }, status=400)
     
     # Date range filter
     # if filter_data.get('dateRange'):
-    #     if filter_data['dateRange'].get('startDate'):
-    #         query = query.filter(created_at__gte=filter_data['dateRange']['startDate'])
-    #     if filter_data['dateRange'].get('endDate'):
-    #         query = query.filter(created_at__lte=filter_data['dateRange']['endDate'])
+    #     start_date = filter_data['dateRange'].get('startDate')
+    #     end_date = filter_data['dateRange'].get('endDate')
+        
+    #     if start_date and end_date:
+    #         print("\n=== DATE RANGE FILTER DEBUGGING ===")
+    #         print(f"Input dates: start={start_date}, end={end_date}")
+    #         print(f"Before filter - Total leads: {query.count()}")
             
-    # Specific date filter
-    if filter_data.get('dateCreated'):
-        query = query.filter(created_at__date=filter_data['dateCreated'])
+    #         try:
+    #             if start_date == end_date:
+    #                 print(f"Single day filter for: {start_date}")
+    #                 query = query.filter(created_at__date=start_date)
+    #                 print(f"After single day filter - Total leads: {query.count()}")
+    #             else:
+    #                 # Convert and log datetime objects
+    #                 start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+    #                 end_dt = datetime.strptime(end_date, '%Y-%m-%d')
+    #                 print(f"\nInitial datetime objects:")
+    #                 print(f"start_dt: {start_dt}")
+    #                 print(f"end_dt: {end_dt}")
+                    
+    #                 # Add one day to end date and set time bounds
+    #                 end_dt = end_dt + timedelta(days=1)
+    #                 start_dt = start_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    #                 end_dt = end_dt.replace(hour=23, minute=59, second=59, microsecond=999999)
+    #                 print(f"\nAdjusted datetime objects:")
+    #                 print(f"start_dt: {start_dt}")
+    #                 print(f"end_dt: {end_dt}")
+                    
+    #                 # Make timezone aware
+    #                 ist = pytz.timezone('Asia/Kolkata')
+    #                 start_dt = timezone.make_aware(start_dt, ist)
+    #                 end_dt = timezone.make_aware(end_dt, ist)
+    #                 print(f"\nTimezone aware datetime objects (IST):")
+    #                 print(f"start_dt: {start_dt}")
+    #                 print(f"end_dt: {end_dt}")
+                    
+    #                 # Apply filter
+    #                 query = query.filter(created_at__gte=start_dt, created_at__lte=end_dt)
+    #                 print(f"\nAfter date range filter - Total leads: {query.count()}")
+                
+    #             # Debug sample results
+    #             sample_leads = query.values('lead_id', 'created_at')[:5]
+    #             print("\nSample leads after filter:")
+    #             for lead in sample_leads:
+    #                 print(f"Lead ID: {lead['lead_id']}, Created: {lead['created_at']}")
+                
+    #         except ValueError as e:
+    #             print(f"\nERROR: Date parsing failed - {str(e)}")
+    #             return Response({
+    #                 'error': f'Invalid date format: {str(e)}. Please use YYYY-MM-DD format.'
+    #             }, status=400)
+    #         except Exception as e:
+    #             print(f"\nERROR: Unexpected error in date filtering - {str(e)}")
+    #             return Response({
+    #                 'error': f'Date filtering error: {str(e)}'
+    #             }, status=400)
+    #         finally:
+    #             print("=== END DATE RANGE FILTER DEBUGGING ===\n")
+
+    # Date range filter
+    if filter_data.get('dateRange'):
+        start_date = filter_data['dateRange'].get('startDate')
+        end_date = filter_data['dateRange'].get('endDate')
+        
+        if start_date and end_date:
+            print("\n=== DATE RANGE FILTER DEBUGGING ===")
+            print(f"Input dates: start={start_date}, end={end_date}")
+            print(f"Before filter - Total leads: {query.count()}")
+            
+            try:
+                if start_date == end_date:
+                    print(f"\n*** Both dates are same: {start_date} ***")
+                    # Use __date lookup to filter by exact date without time
+                    start_dt = datetime.strptime(start_date, '%Y-%m-%d') + timedelta(days=1)
+                    query = query.filter(created_at__date=start_dt)
+                    print(f"After single day filter - Total leads: {query.count()}")
+                    
+                    # Debug sample results for single day
+                    sample_leads = query.values('lead_id', 'created_at')[:5]
+                    print("\nSample leads for single day:")
+                    for lead in sample_leads:
+                        print(f"Lead ID: {lead['lead_id']}, Created: {lead['created_at']}")
+
+                else:
+                    # Convert and log datetime objects
+                    start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+                    end_dt = datetime.strptime(end_date, '%Y-%m-%d')
+                    print(f"\nInitial datetime objects:")
+                    print(f"start_dt: {start_dt}")
+                    print(f"end_dt: {end_dt}")
+                    
+                    # Add one day to end date and set time bounds
+                    end_dt = end_dt + timedelta(days=1)
+                    start_dt = start_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+                    end_dt = end_dt.replace(hour=23, minute=59, second=59, microsecond=999999)
+                    print(f"\nAdjusted datetime objects:")
+                    print(f"start_dt: {start_dt}")
+                    print(f"end_dt: {end_dt}")
+                    
+                    # Make timezone aware
+                    ist = pytz.timezone('Asia/Kolkata')
+                    start_dt = timezone.make_aware(start_dt, ist)
+                    end_dt = timezone.make_aware(end_dt, ist)
+                    print(f"\nTimezone aware datetime objects (IST):")
+                    print(f"start_dt: {start_dt}")
+                    print(f"end_dt: {end_dt}")
+                    
+                    # Apply filter
+                    query = query.filter(created_at__gte=start_dt, created_at__lte=end_dt)
+                    print(f"\nAfter date range filter - Total leads: {query.count()}")
+                    
+                    # Debug sample results for date range
+                    sample_leads = query.values('lead_id', 'created_at')[:5]
+                    print("\nSample leads for date range:")
+                    for lead in sample_leads:
+                        print(f"Lead ID: {lead['lead_id']}, Created: {lead['created_at']}")
+                
+            except ValueError as e:
+                print(f"\nERROR: Date parsing failed - {str(e)}")
+                return Response({
+                    'error': f'Invalid date format: {str(e)}. Please use YYYY-MM-DD format.'
+                }, status=400)
+            except Exception as e:
+                print(f"\nERROR: Unexpected error in date filtering - {str(e)}")
+                return Response({
+                    'error': f'Date filtering error: {str(e)}'
+                }, status=400)
+            finally:
+                print("=== END DATE RANGE FILTER DEBUGGING ===\n")
+
+
+    # Car type filter
+    if filter_data.get('luxuryNormal'):
+        car_type = filter_data['luxuryNormal']
+        print(f"\nApplying car type filter for: {car_type}")
+        print("Before car type filter count:", query.count())
+        query = query.filter(lead_type=car_type)
+        print("After car type filter count:", query.count())
     
-    # Order by latest first
+    # Final ordering
+    print("\nApplying final ordering")
     leads = query.order_by('-created_at')
-    pagination_data = paginate_leads(leads, page_number)
+    
+    # Double-check the filtering
+    print("\nVerifying final filtered results:")
+    print(f"Total leads after all filters: {leads.count()}")
+    unique_users = leads.values_list('profile__user__username', flat=True).distinct()
+    print(f"Unique users in filtered results: {list(unique_users)}")
+    
+    # Apply pagination with extra validation
+    pagination_data = custom_paginate_leads(leads, page_number, items_per_page=5)
+    
+    # Final verification
+    if pagination_data['leads']:
+        print("\nVerifying leads in response:")
+        for lead in pagination_data['leads']:
+            print(f"Lead ID: {lead['id']}, User: {lead.get('profile__user__username', 'N/A')}")
     
     return Response(pagination_data)
+
 
 @api_view(['GET'])
 @authentication_classes([TokenAuthentication])
@@ -379,6 +695,25 @@ def update_lead(request, id):
                 customer.language_barrier = customer_data.get('languageBarrier', customer.language_barrier)
                 customer.save()
 
+            # status history 18 feb
+            new_status = arrival_data.get('leadStatus')
+
+            # Initialize status_history if None
+            if lead.status_history is None:
+                lead.status_history = []
+
+            # Add new status entry regardless if it's same or different
+            if new_status:
+                status_entry = {
+                    'status': new_status,
+                    'changed_by': request.user.username,
+                    'timestamp': timezone.now().astimezone(pytz.timezone('Asia/Kolkata')).isoformat()
+                }
+                if lead.status_history:
+                    lead.status_history.append(status_entry)
+                else:
+                    lead.status_history = [status_entry]
+
             # Update lead fields
             lead.source = customer_data.get('source', lead.source)
             lead.lead_type = basic_data.get('carType', lead.lead_type)
@@ -396,26 +731,36 @@ def update_lead(request, id):
             lead.ca_name = basic_data.get('caName', lead.ca_name)
             lead.products = overview_data.get('tableData', lead.products)
             lead.estimated_price = basic_data.get('total', lead.estimated_price)
+            lead.final_amount = arrival_data.get('finalAmount', lead.final_amount)
+            lead.battery_feature = arrival_data.get('batteryFeature', lead.battery_feature)
+            lead.additional_work = arrival_data.get('additionalWork', lead.additional_work)
+            lead.fuel_status = arrival_data.get('fuelStatus', lead.fuel_status)
+            lead.speedometer_rd = arrival_data.get('speedometerRd', lead.speedometer_rd)
+            lead.inventory = arrival_data.get('inventory', lead.inventory)
+            lead.discount = overview_data.get('discount', lead.discount)
+            lead.afterDiscountAmount = overview_data.get('finalAmount', lead.afterDiscountAmount)
+            ist = pytz.timezone('Asia/Kolkata') # 18 feb
+            lead.updated_at = timezone.now().astimezone(ist) # 18 feb
             lead.save()
 
-            # try:
+            try:
 
-            #     # Create order if lead status is Complete
-            #     if arrival_data['leadStatus'].lower() == 'completed':
-            #         # Check if lead already has an order
-            #         if not hasattr(lead, 'order') or lead.order is None:
-            #             print('This lead does not have any order-')
-            #             order_id = generate_order_id(customer_data['mobileNumber'])
-            #             order = Order.objects.create(
-            #                 order_id=order_id,
-            #             )
+                # Create order if lead status is Complete
+                if arrival_data['leadStatus'].lower() == 'job card':
+                    # Check if lead already has an order
+                    if not hasattr(lead, 'order') or lead.order is None:
+                        print('This lead does not have any order-')
+                        order_id = generate_order_id(customer_data['mobileNumber'])
+                        order = Order.objects.create(
+                            order_id=order_id,
+                        )
                         
-            #             # Update lead with order reference
-            #             lead.order = order
-            #             lead.save()
+                        # Update lead with order reference
+                        lead.order = order
+                        lead.save()
 
-            # except Exception as e:
-            #     print('Error saving data:', str(e))
+            except Exception as e:
+                print('Error saving data:', str(e))
 
 
             if cars_data and car:
@@ -484,7 +829,24 @@ def lead_format(leads):
         'disposition': lead.disposition or 'NA',
         'arrival_time': lead.arrival_time if isinstance(lead.arrival_time, str) else lead.arrival_time.isoformat() if lead.arrival_time else '',
         'products': lead.products or 'NA',
+        'overview': {
+            'tableData': lead.products or [],
+            'total': float(lead.estimated_price) if lead.estimated_price else 0,
+            'discount': float(lead.discount) if lead.discount is not None else 0,
+            'finalAmount': float(lead.afterDiscountAmount) if lead.afterDiscountAmount is not None 
+                else float(lead.estimated_price) if lead.estimated_price 
+                else 0
+        },
+
+
         'estimated_price': lead.estimated_price or 0,
+        'final_amount': lead.final_amount or 0,
+        'battery_feature': lead.battery_feature or 'NA',
+        'additional_work': lead.additional_work or 'NA',
+        'fuel_status': lead.fuel_status or 'NA',
+        'speedometer_rd': lead.speedometer_rd or 'NA',
+        'inventory': lead.inventory or 'NA',
+
 
         'workshop_details': {
             'name': lead.workshop_details.get('name') if lead.workshop_details else '',
@@ -494,8 +856,11 @@ def lead_format(leads):
             'mechanic': lead.workshop_details.get('mechanic') if lead.workshop_details else '',
         } if lead.workshop_details else {},
 
+        'status_history': lead.status_history or [], # 18 feb
+
         'orderId': lead.order.order_id if lead.order else 'NA',
         'regNumber': lead.car.reg_no if lead.car else 'NA',
+        'vinNumber': lead.car.chasis_no if lead.car else 'NA', # 18 Feb
         'status': lead.lead_status or 'NA',
         'cceName': lead.cce_name or 'NA',
         'caName': lead.ca_name or 'NA',
@@ -503,29 +868,30 @@ def lead_format(leads):
         'caComments': lead.ca_comments or 'NA',
         # 'arrivalDate': lead.arrival_time.strftime("%b %d,%Y,%H:%M") if lead.arrival_time else 'NA',
         'created_at': lead.created_at.isoformat() if lead.created_at else None,
-        'updated_at': lead.created_at.isoformat() if lead.created_at else None,
+        'updated_at': lead.updated_at.isoformat() if lead.updated_at else None, # 18 feb
+        'profile__user__username': lead.profile.user.username,
     } for lead in leads]
     return leads_data
 
-def paginate_leads(leads_queryset, page_number, items_per_page=5):
-    """
-    Helper function to paginate leads queryset
-    """
-    paginator = Paginator(leads_queryset, items_per_page)
+# def paginate_leads(leads_queryset, page_number, items_per_page=5):
+#     """
+#     Helper function to paginate leads queryset
+#     """
+#     paginator = Paginator(leads_queryset, items_per_page)
     
-    try:
-        paginated_leads = paginator.page(page_number)
-    except PageNotAnInteger:
-        paginated_leads = paginator.page(1)
-    except EmptyPage:
-        paginated_leads = paginator.page(paginator.num_pages)
+#     try:
+#         paginated_leads = paginator.page(page_number)
+#     except PageNotAnInteger:
+#         paginated_leads = paginator.page(1)
+#     except EmptyPage:
+#         paginated_leads = paginator.page(paginator.num_pages)
     
-    return {
-        'leads': lead_format(paginated_leads),
-        'total_pages': paginator.num_pages,
-        'current_page': paginated_leads.number,
-        'total_leads': paginator.count
-    }
+#     return {
+#         'leads': lead_format(paginated_leads),
+#         'total_pages': paginator.num_pages,
+#         'current_page': paginated_leads.number,
+#         'total_leads': paginator.count
+#     }
 
 
 def generate_custom_lead_id(customer_number):
@@ -583,16 +949,35 @@ def create_lead_from_wordpress(request):
 
             dummy_table_data = [{"name": "Service Name", "type": "Service Type", "total": "0", "workdone": "wordone", "determined": False},]
 
-            
+            # 18 feb
             # profiles = Profile.objects.annotate(lead_count=Count('profile_leads')).order_by('lead_count')
             profiles = Profile.objects.filter(is_caller=True).annotate(lead_count=Count('profile_leads')).order_by('lead_count')
     
-            print("\n--- All Profiles with Lead Counts ---")
-            for profile in profiles:
-                print(f"Profile: {profile.user.username}, Lead Count: {profile.lead_count}")
+            # print("\n--- All Profiles with Lead Counts ---")
+            # for profile in profiles:
+            #     print(f"Profile: {profile.user.username}, Lead Count: {profile.lead_count}")
     
-            # Get profile with least leads
-            least_busy_profile = profiles.first()
+            # # Get profile with least leads
+            # least_busy_profile = profiles.first()
+
+            # Filter active profiles
+            active_profiles = profiles.filter(user__userstatus__status='Active')
+
+            if active_profiles.exists():
+                print("\n--- Active Profiles with Lead Counts ---")
+                for profile in active_profiles:
+                    print(f"Profile: {profile.user.username}, Lead Count: {profile.lead_count}")
+                # Get profile with least leads among active profiles
+                least_busy_profile = active_profiles.first()
+            else:
+                print("\n--- No Active Profiles Found, Using All Profiles ---")
+                for profile in profiles:
+                    print(f"Profile: {profile.user.username}, Lead Count: {profile.lead_count}")
+                # Get profile with least leads among all profiles
+                least_busy_profile = profiles.first()
+
+
+
             print("\n--- Profile with Least Leads ---")
             print(f"Username: {least_busy_profile.user.username}")
             print(f"Lead Count: {least_busy_profile.lead_count}")
@@ -683,6 +1068,55 @@ def garage_detail(request, pk):
         garage.save()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+@api_view(['POST'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def update_user_status(request):
+    user = request.user
+    status = request.data.get('status')
+    
+    if status not in ['Active', 'Break', 'offline']:
+        return Response({'error': 'Invalid status'}, status=400)
+        
+    user_status, created = UserStatus.objects.get_or_create(user=user)
+    
+    # Add to history before updating current status
+    ist = pytz.timezone('Asia/Kolkata')
+    current_time = timezone.now().astimezone(ist)
+    current_date = current_time.date().isoformat()
+    
+    if current_date not in user_status.status_history:
+        user_status.status_history[current_date] = []
+    
+    user_status.status_history[current_date].append({
+        'status': status,
+        'timestamp': current_time.isoformat()
+    })
+    
+    user_status.status = status
+    user_status.timestamp = current_time
+    user_status.save()
+    
+    return Response({'status': status, 'timestamp': current_time.isoformat()})
+
+@api_view(['GET'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def get_user_status(request):
+    user = request.user
+    try:
+        user_status = UserStatus.objects.get(user=user)
+        ist = pytz.timezone('Asia/Kolkata')
+        timestamp = user_status.timestamp.astimezone(ist)
+        return Response({
+            'status': user_status.status,
+            'timestamp': timestamp.isoformat(),
+            'history': user_status.status_history
+        })
+    except UserStatus.DoesNotExist:
+        return Response({'status': 'offline'}, status=404)
+
+# ---------------------------------------------------------------------
 
 
 def generate_order_id(mobile_number):
@@ -703,3 +1137,42 @@ def generate_order_id(mobile_number):
     # Combine all parts
     order_id = f"{year}{last_four}{month}{day}{hour}{minute}"
     return order_id
+
+
+@api_view(['GET'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def get_customer_by_mobile(request, mobile_number):
+    try:
+        # Get customer and their most recent lead
+        customer = Customer.objects.get(mobile_number=mobile_number)
+        latest_lead = Lead.objects.filter(customer=customer).order_by('-created_at').first()
+        
+        data = {
+            'customerName': customer.customer_name,
+            'whatsappNumber': customer.whatsapp_number,
+            'customerEmail': customer.customer_email,
+            'languageBarrier': customer.language_barrier,
+            'location': {
+                'address': latest_lead.address if latest_lead else '',
+                'city': latest_lead.city if latest_lead else '',
+                'state': latest_lead.state if latest_lead else '',
+                'buildingName': latest_lead.building if latest_lead else '',
+                'landmark': latest_lead.landmark if latest_lead else '',
+                'mapLink': latest_lead.map_link if latest_lead else ''
+            } if latest_lead else {},
+            'cars': [
+                {
+                    'carBrand': car.brand,
+                    'carModel': car.model,
+                    'year': car.year,
+                    'fuel': car.fuel,
+                    'variant': car.variant,
+                    'chasisNo': car.chasis_no,
+                    'regNo': car.reg_no
+                } for car in customer.cars.all()
+            ]
+        }
+        return Response(data)
+    except Customer.DoesNotExist:
+        return Response({'message': 'Customer not found'}, status=404)
