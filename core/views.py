@@ -153,6 +153,7 @@ def search_leads(request):
             leads = Lead.objects.filter(customer__customer_name__icontains=query)
     else:
         # Search in Order IDs first
+        query = query.strip()
         if (len(query) <= 10):
             leads = Lead.objects.filter(customer__mobile_number__icontains=query)
         else:
