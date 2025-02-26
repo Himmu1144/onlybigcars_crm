@@ -84,3 +84,12 @@ class UserStatusAdmin(admin.ModelAdmin):
             'fields': ('user', 'status', 'timestamp', 'status_history')
         }),
     )
+
+
+@admin.register(Garage)
+class GarageAdmin(admin.ModelAdmin):
+    list_display = ('name', 'mechanic', 'mobile', 'is_active', 'created_at')
+    list_filter = ('is_active', 'created_at')
+    search_fields = ('name', 'mechanic', 'locality', 'mobile')
+    ordering = ('-created_at',)
+    list_per_page = 20
