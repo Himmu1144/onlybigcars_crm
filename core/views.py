@@ -113,28 +113,62 @@ def custom_paginate_leads(leads_queryset, page_number, items_per_page=5):
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
 def home_view(request):
-     # Get 3 most recent leads
-    page_number = request.GET.get('page', 1)
-    recent_leads = Lead.objects.select_related('customer', 'profile', 'order').order_by('-created_at')
-    last_lead = Lead.objects.order_by('-created_at').first()
-    if last_lead:
-        # Split the lead_id and get the last segment
-        seq_num = int(last_lead.lead_id.split('-')[-1]) + 1
-    else:
-        # If no leads exist, start with 1
-        seq_num = 1
-    
-    # pagination_data = paginate_leads(recent_leads, page_number)
-    pagination_data = custom_paginate_leads(recent_leads, page_number)  # Using custom_paginate_leads here
-    users = User.objects.all().values('id', 'username')
-    users_data = list(users)
-    print('this is the seq num', seq_num)
-    return Response({
-        "message": "Recent Leads",
-        'seq_num': seq_num,
-        **pagination_data,
-        "users": list(users)
-    })
+    try:
+        # Get 3 most recent leads
+        page_number = request.GET.get('page', 1)
+        recent_leads = Lead.objects.select_related('customer', 'profile', 'order').order_by('-created_at')
+        garages = Garage.objects.filter(is_active=True).values('id', 'name', 'mechanic', 'locality','mobile')
+        last_lead = Lead.objects.order_by('-created_at').first()
+        if last_lead:
+            # Split the lead_id and get the last segment
+            seq_num = int(last_lead.lead_id.split('-')[-1]) + 1
+        else:
+            # If no leads exist, start with 1
+            seq_num = 1
+
+        # Get current logged in user
+        current_user = request.user
+        is_admin = current_user.is_superuser
+
+        # Calculate statistics for the logged-in user's completed leads
+        user_completed_leads = Lead.objects.filter(
+            profile__user=current_user,
+            lead_status='Completed'  # Assuming 'Completed' is the status value
+        )
+        
+        # Total count of completed leads by this user
+        total_completed = user_completed_leads.count()
+        
+        # GMV - Sum of final_amount for all completed leads
+        gmv = sum(lead.final_amount or 0 for lead in user_completed_leads)
+        
+        # Average Ticket Size (ATS) - GMV divided by number of leads
+        ats = gmv / total_completed if total_completed > 0 else 0
+        
+        
+        # pagination_data = paginate_leads(recent_leads, page_number)
+        pagination_data = custom_paginate_leads(recent_leads, page_number)  # Using custom_paginate_leads here
+        users = User.objects.all().values('id', 'username')
+        users_data = list(users)
+        print('this is the seq num', seq_num)
+        return Response({
+            "message": "Recent Leads",
+            'seq_num': seq_num,
+            **pagination_data,
+            "users": list(users),
+            "garages": list(garages),  # Add garages to response
+            'is_admin': is_admin,
+
+            "user_stats": {
+            "total_completed_leads": total_completed,
+            "gmv": gmv,
+            "ats": ats,
+        }
+        })
+    except Exception as e:
+        return Response({
+            "message": str(e)
+        }, status=status.HTTP_400_BAD_REQUEST)  
 
 
 @api_view(['GET'])
@@ -152,7 +186,6 @@ def search_leads(request):
             # Search in Customer names
             leads = Lead.objects.filter(customer__customer_name__icontains=query)
     else:
-        # Search in Order IDs first
         query = query.strip()
         if (len(query) <= 10):
             leads = Lead.objects.filter(customer__mobile_number__icontains=query)
@@ -274,6 +307,9 @@ def edit_form_submit(request):
                 # Additional arrival
                 final_amount=arrival_data.get('finalAmount', 0),
                 battery_feature=arrival_data.get('batteryFeature', ''),
+                commission_due=arrival_data.get('commissionDue', 0),
+                commission_received=arrival_data.get('commissionReceived', 0),
+                commission_percent=arrival_data.get('commissionPercent', 0),
                 additional_work=arrival_data.get('additionalWork', ''),
                 fuel_status=arrival_data.get('fuelStatus', ''),
                 speedometer_rd=arrival_data.get('speedometerRd', ''),
@@ -376,6 +412,9 @@ def filter_leads(request):
         'profile__user', 
         'order'
     ).all()
+
+    if filter_data.get('garage'):
+        query = query.filter(workshop_details__name=filter_data['garage'])
     
     print("\n=== FILTER DEBUGGING START ===")
     print(f"Initial query count: {query.count()}")
@@ -595,6 +634,7 @@ def filter_leads(request):
                     query = query.filter(created_at__gte=start_dt, created_at__lte=end_dt)
                     print(f"\nAfter date range filter - Total leads: {query.count()}")
                     
+                    
                     # Debug sample results for date range
                     sample_leads = query.values('lead_id', 'created_at')[:5]
                     print("\nSample leads for date range:")
@@ -627,20 +667,54 @@ def filter_leads(request):
     print("\nApplying final ordering")
     leads = query.order_by('-created_at')
     
+    # # Double-check the filtering
+    # print("\nVerifying final filtered results:")
+    # print(f"Total leads after all filters: {leads.count()}")
+    # unique_users = leads.values_list('profile__user__username', flat=True).distinct()
+    # print(f"Unique users in filtered results: {list(unique_users)}")
+    
+    # # Apply pagination with extra validation
+    # pagination_data = custom_paginate_leads(leads, page_number, items_per_page=5)
+    
+    # # Final verification
+    # if pagination_data['leads']:
+    #     print("\nVerifying leads in response:")
+    #     for lead in pagination_data['leads']:
+    #         print(f"Lead ID: {lead['id']}, User: {lead.get('profile__user__username', 'N/A')}")
+
+    # Calculate the required values
+    total_leads = leads.count()
+    total_estimated_price = sum(lead.afterDiscountAmount if lead.afterDiscountAmount else lead.estimated_price or 0 for lead in leads)
+    total_final_amount = sum(lead.final_amount or 0 for lead in leads)
+
+    # Calculate per lead values
+    est_price_per_lead = total_estimated_price / total_leads if total_leads > 0 else 0
+    final_amount_per_lead = total_final_amount / total_leads if total_leads > 0 else 0
+
     # Double-check the filtering
     print("\nVerifying final filtered results:")
-    print(f"Total leads after all filters: {leads.count()}")
+    print(f"Total leads after all filters: {total_leads}")
     unique_users = leads.values_list('profile__user__username', flat=True).distinct()
     print(f"Unique users in filtered results: {list(unique_users)}")
-    
+
     # Apply pagination with extra validation
     pagination_data = custom_paginate_leads(leads, page_number, items_per_page=5)
-    
+
     # Final verification
     if pagination_data['leads']:
         print("\nVerifying leads in response:")
         for lead in pagination_data['leads']:
             print(f"Lead ID: {lead['id']}, User: {lead.get('profile__user__username', 'N/A')}")
+
+    # Add the calculated values to the response
+    pagination_data.update({
+        'total_leads': total_leads,
+        'total_estimated_price': total_estimated_price,
+        'est_price_per_lead': est_price_per_lead,
+        'total_final_amount': total_final_amount,
+        'final_amount_per_lead': final_amount_per_lead
+    })
+        
     
     return Response(pagination_data)
 
@@ -733,6 +807,9 @@ def update_lead(request, id):
             lead.products = overview_data.get('tableData', lead.products)
             lead.estimated_price = basic_data.get('total', lead.estimated_price)
             lead.final_amount = arrival_data.get('finalAmount', lead.final_amount)
+            lead.commission_due = arrival_data.get('commissionDue', lead.commission_due)
+            lead.commission_received = arrival_data.get('commissionReceived', lead.commission_received)
+            lead.commission_percent = arrival_data.get('commissionPercent', lead.commission_percent)
             lead.battery_feature = arrival_data.get('batteryFeature', lead.battery_feature)
             lead.additional_work = arrival_data.get('additionalWork', lead.additional_work)
             lead.fuel_status = arrival_data.get('fuelStatus', lead.fuel_status)
@@ -842,6 +919,9 @@ def lead_format(leads):
 
         'estimated_price': lead.estimated_price or 0,
         'final_amount': lead.final_amount or 0,
+        'commission_due': lead.commission_due or 0,
+        'commission_received': lead.commission_received or 0,
+        'commission_percent': lead.commission_percent or 0,
         'battery_feature': lead.battery_feature or 'NA',
         'additional_work': lead.additional_work or 'NA',
         'fuel_status': lead.fuel_status or 'NA',

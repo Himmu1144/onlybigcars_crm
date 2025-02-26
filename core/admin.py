@@ -60,7 +60,7 @@ class LeadAdmin(admin.ModelAdmin):
             'fields': ('address', 'city', 'state', 'building', 'landmark', 'map_link')
         }),
         ('Status', {
-            'fields': ('lead_status', 'arrival_mode', 'disposition', 'arrival_time', 'is_read', 'status_history', 'final_amount')
+            'fields': ('lead_status', 'arrival_mode', 'disposition', 'arrival_time', 'is_read', 'status_history', 'final_amount', 'commission_due', 'commission_received', 'commission_percent')
         }), # 18 feb
         ('Workshop', {
             'fields': ('workshop_details',)
