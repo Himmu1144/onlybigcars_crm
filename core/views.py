@@ -450,14 +450,34 @@ def filter_leads(request):
     # Status filter
     if filter_data.get('status'):
         status = filter_data['status']
-        print(f"\nApplying status filter for: {status}")
-        print("Before status filter count:", query.count())
-        query = query.filter(lead_status=status)
-        print("After status filter count:", query.count())
-        # Verify statuses
-        statuses = list(query.values_list('lead_status', flat=True).distinct())
-        print("Statuses in filtered results:", statuses)
-    
+        if status == 'Stats':
+            print('Stats Status Selected')
+            query = query.filter(lead_status__in=['Completed', 'Commision Due'])
+            
+            # # Calculate commission totals
+            # total_commission_due = sum(lead.commission_due or 0 for lead in query)
+            # total_commission_received = sum(lead.commission_received or 0 for lead in query)
+            # total_final_amount = sum(lead.final_amount or 0 for lead in query)
+            
+            # # Add these values to pagination_data later
+            # pagination_data.update({
+            #     'commission_stats': {
+            #         'total_commission_due': total_commission_due,
+            #         'total_commission_received': total_commission_received,
+            #         # 'total_final_amount': total_final_amount
+            #     }
+            # })
+            
+            statuses = list(query.values_list('lead_status', flat=True).distinct())
+        else:
+            print(f"\nApplying status filter for: {status}")
+            print("Before status filter count:", query.count())
+            query = query.filter(lead_status=status)
+            print("After status filter count:", query.count())
+            # Verify statuses
+            statuses = list(query.values_list('lead_status', flat=True).distinct())
+            print("Statuses in filtered results:", statuses)
+        
     # Location filter
     if filter_data.get('location'):
         location = filter_data['location']
@@ -484,103 +504,7 @@ def filter_leads(request):
         query = query.filter(arrival_mode=mode)
         print("After arrival mode filter count:", query.count())
     
-    # # Date range filter
-    # if filter_data.get('dateRange'):
-    #     start_date = filter_data['dateRange'].get('startDate')
-    #     end_date = filter_data['dateRange'].get('endDate')
-        
-    #     if start_date and end_date:
-    #         print(f"\nApplying date range filter: {start_date} to {end_date}")
-    #         print("Before date range filter count:", query.count())
-            
-    #         try:
-    #             # Convert strings to datetime objects
-    #             start_dt = datetime.strptime(start_date, '%Y-%m-%d')
-    #             end_dt = datetime.strptime(end_date, '%Y-%m-%d')
-                
-    #             # Set time to start and end of day
-    #             start_dt = start_dt.replace(hour=0, minute=0, second=0, microsecond=0)
-    #             end_dt = end_dt.replace(hour=23, minute=59, second=59, microsecond=999999)
-                
-    #             # Make timezone aware
-    #             ist = pytz.timezone('Asia/Kolkata')
-    #             start_dt = timezone.make_aware(start_dt, ist)
-    #             end_dt = timezone.make_aware(end_dt, ist)
-                
-    #             query = query.filter(created_at__range=[start_dt, end_dt])
-    #             print("After date range filter count:", query.count())
-                
-    #             # Debug date range results
-    #             date_samples = list(query.values_list('created_at', flat=True)[:5])
-    #             print("Sample dates in results:", date_samples)
-                
-    #         except ValueError as e:
-    #             print(f"Date parsing error: {e}")
-    #             return Response({
-    #                 'error': 'Invalid date format. Please use YYYY-MM-DD format.'
-    #             }, status=400)
-    
-    # Date range filter
-    # if filter_data.get('dateRange'):
-    #     start_date = filter_data['dateRange'].get('startDate')
-    #     end_date = filter_data['dateRange'].get('endDate')
-        
-    #     if start_date and end_date:
-    #         print("\n=== DATE RANGE FILTER DEBUGGING ===")
-    #         print(f"Input dates: start={start_date}, end={end_date}")
-    #         print(f"Before filter - Total leads: {query.count()}")
-            
-    #         try:
-    #             if start_date == end_date:
-    #                 print(f"Single day filter for: {start_date}")
-    #                 query = query.filter(created_at__date=start_date)
-    #                 print(f"After single day filter - Total leads: {query.count()}")
-    #             else:
-    #                 # Convert and log datetime objects
-    #                 start_dt = datetime.strptime(start_date, '%Y-%m-%d')
-    #                 end_dt = datetime.strptime(end_date, '%Y-%m-%d')
-    #                 print(f"\nInitial datetime objects:")
-    #                 print(f"start_dt: {start_dt}")
-    #                 print(f"end_dt: {end_dt}")
-                    
-    #                 # Add one day to end date and set time bounds
-    #                 end_dt = end_dt + timedelta(days=1)
-    #                 start_dt = start_dt.replace(hour=0, minute=0, second=0, microsecond=0)
-    #                 end_dt = end_dt.replace(hour=23, minute=59, second=59, microsecond=999999)
-    #                 print(f"\nAdjusted datetime objects:")
-    #                 print(f"start_dt: {start_dt}")
-    #                 print(f"end_dt: {end_dt}")
-                    
-    #                 # Make timezone aware
-    #                 ist = pytz.timezone('Asia/Kolkata')
-    #                 start_dt = timezone.make_aware(start_dt, ist)
-    #                 end_dt = timezone.make_aware(end_dt, ist)
-    #                 print(f"\nTimezone aware datetime objects (IST):")
-    #                 print(f"start_dt: {start_dt}")
-    #                 print(f"end_dt: {end_dt}")
-                    
-    #                 # Apply filter
-    #                 query = query.filter(created_at__gte=start_dt, created_at__lte=end_dt)
-    #                 print(f"\nAfter date range filter - Total leads: {query.count()}")
-                
-    #             # Debug sample results
-    #             sample_leads = query.values('lead_id', 'created_at')[:5]
-    #             print("\nSample leads after filter:")
-    #             for lead in sample_leads:
-    #                 print(f"Lead ID: {lead['lead_id']}, Created: {lead['created_at']}")
-                
-    #         except ValueError as e:
-    #             print(f"\nERROR: Date parsing failed - {str(e)}")
-    #             return Response({
-    #                 'error': f'Invalid date format: {str(e)}. Please use YYYY-MM-DD format.'
-    #             }, status=400)
-    #         except Exception as e:
-    #             print(f"\nERROR: Unexpected error in date filtering - {str(e)}")
-    #             return Response({
-    #                 'error': f'Date filtering error: {str(e)}'
-    #             }, status=400)
-    #         finally:
-    #             print("=== END DATE RANGE FILTER DEBUGGING ===\n")
+
 
     # Date range filter
     if filter_data.get('dateRange'):
@@ -691,6 +615,10 @@ def filter_leads(request):
     est_price_per_lead = total_estimated_price / total_leads if total_leads > 0 else 0
     final_amount_per_lead = total_final_amount / total_leads if total_leads > 0 else 0
 
+ 
+
+
+
     # Double-check the filtering
     print("\nVerifying final filtered results:")
     print(f"Total leads after all filters: {total_leads}")
@@ -705,6 +633,24 @@ def filter_leads(request):
         print("\nVerifying leads in response:")
         for lead in pagination_data['leads']:
             print(f"Lead ID: {lead['id']}, User: {lead.get('profile__user__username', 'N/A')}")
+
+    if filter_data.get('status'):
+        status = filter_data['status']
+        if status == 'Stats':
+            # Calculate commission totals
+            total_commission_due = sum(lead.commission_due or 0 for lead in query)
+            total_commission_received = sum(lead.commission_received or 0 for lead in query)
+            total_final_amount = sum(lead.final_amount or 0 for lead in query)
+            
+            # Add these values to pagination_data later
+            pagination_data.update({
+                'commission_stats': {
+                    'total_commission_due': total_commission_due,
+                    'total_commission_received': total_commission_received,
+                    # 'total_final_amount': total_final_amount
+                }
+            })
+            
 
     # Add the calculated values to the response
     pagination_data.update({
