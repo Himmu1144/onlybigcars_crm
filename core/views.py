@@ -8,6 +8,7 @@ from django.contrib.auth import authenticate
 from django.contrib.auth import login, logout
 from django.contrib.auth.models import User
 from rest_framework import status
+from django.db.models import Q
 
 from django.db import transaction
 from .models import Customer, Lead, Profile, Order, Car, UserStatus
@@ -126,9 +127,18 @@ def home_view(request):
             # If no leads exist, start with 1
             seq_num = 1
 
+        
+
         # Get current logged in user
         current_user = request.user
         is_admin = current_user.is_superuser
+
+        # Filter leads based on admin status
+        if not is_admin:
+            # Non-admins can only see their own leads
+            recent_leads = Lead.objects.select_related('customer', 'profile', 'order')\
+                .filter(cce_name=current_user.username)\
+                .order_by('-created_at')
 
         # Calculate statistics for the logged-in user's completed leads
         user_completed_leads = Lead.objects.filter(
@@ -146,6 +156,7 @@ def home_view(request):
         ats = gmv / total_completed if total_completed > 0 else 0
         
         
+        
         # pagination_data = paginate_leads(recent_leads, page_number)
         pagination_data = custom_paginate_leads(recent_leads, page_number)  # Using custom_paginate_leads here
         users = User.objects.all().values('id', 'username')
@@ -158,6 +169,7 @@ def home_view(request):
             "users": list(users),
             "garages": list(garages),  # Add garages to response
             'is_admin': is_admin,
+            'current_username': current_user.username,
 
             "user_stats": {
             "total_completed_leads": total_completed,
@@ -192,17 +204,28 @@ def search_leads(request):
         else:
             leads = Lead.objects.filter(order__order_id__icontains=query)
         
-        # # If no results found, search in customer mobile numbers
-        # if not leads.exists():
-        #     leads = Lead.objects.filter(customer__mobile_number__icontains=query)
 
-    # pagination_data = paginate_leads(leads, page_number)
-    pagination_data = custom_paginate_leads(leads, page_number)  # Using custom_paginate_leads here
+    # Get current logged in user
+    current_user = request.user
+    is_admin = current_user.is_superuser
+    # Filter leads based on admin status
+    if not is_admin:
+        # Non-admins can only see their own leads
+        leads = leads.filter(cce_name=current_user.username)
+    
+    # Apply pagination
+    pagination_data = custom_paginate_leads(leads, page_number)
+    
+    # Add admin status to response
+    pagination_data.update({
+        'is_admin': is_admin,
+        'current_username': current_user.username,
+    })
+    
     return Response({
         "message": "Search Results",
         **pagination_data
     })
-
 @api_view(['POST'])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -264,14 +287,13 @@ def edit_form_submit(request):
             custom_lead_id = generate_custom_lead_id(customer_data['mobileNumber'])
 
 
-             # Initialize status history for new lead 18 feb
+            # Initialize status history for new lead 18 feb
             initial_status = arrival_data.get('leadStatus')
             initial_status_history = [{
                 'status': initial_status,
                 'changed_by': request.user.username,
                 'timestamp': timezone.now().astimezone(pytz.timezone('Asia/Kolkata')).isoformat()
             }] if initial_status else []
-
 
             # Create lead with user's profile
             lead = Lead.objects.create(
@@ -413,8 +435,24 @@ def filter_leads(request):
         'order'
     ).all()
 
+    # Replace the existing garage filter code with this
     if filter_data.get('garage'):
-        query = query.filter(workshop_details__name=filter_data['garage'])
+        garage_names = filter_data['garage']
+        print(f"\nApplying garage filter for: {garage_names}")
+        print("Before garage filter count:", query.count())
+
+        if isinstance(garage_names, list) and garage_names:
+            # Filter using the contains operator for JSON field
+            
+            garage_q = Q()
+            for name in garage_names:
+                # Build OR conditions for each garage name
+                garage_q |= Q(workshop_details__name=name)
+            query = query.filter(garage_q)
+        elif garage_names:  # Single string value
+            query = query.filter(workshop_details__name=garage_names)
+
+        print("After garage filter count:", query.count())
     
     print("\n=== FILTER DEBUGGING START ===")
     print(f"Initial query count: {query.count()}")
@@ -450,7 +488,7 @@ def filter_leads(request):
     # Status filter
     if filter_data.get('status'):
         status = filter_data['status']
-        if status == 'Stats':
+        if status == 'Analytics':
             print('Stats Status Selected')
             query = query.filter(lead_status__in=['Completed', 'Commision Due'])
             
@@ -483,7 +521,11 @@ def filter_leads(request):
         location = filter_data['location']
         print(f"\nApplying location filter for: {location}")
         print("Before location filter count:", query.count())
-        query = query.filter(city=location)
+        # Special case for Bangalore/Bengaluru
+        if location == 'Bangalore':
+            query = query.filter(Q(city='Bangalore') | Q(city='Bengaluru')) #28-2
+        else:
+            query = query.filter(city=location)
         print("After location filter count:", query.count())
         # Verify cities
         cities = list(query.values_list('city', flat=True).distinct())
@@ -636,7 +678,7 @@ def filter_leads(request):
 
     if filter_data.get('status'):
         status = filter_data['status']
-        if status == 'Stats':
+        if status == 'Analytics':
             # Calculate commission totals
             total_commission_due = sum(lead.commission_due or 0 for lead in query)
             total_commission_received = sum(lead.commission_received or 0 for lead in query)
@@ -674,11 +716,30 @@ def get_lead(request, id):
         lead = Lead.objects.get(lead_id=id)
         lead.is_read = True
         lead.save()
-        # print('The lead bc -   ', lead)
-        # Use the same lead_format function
-        formatted_lead = lead_format([lead])  # Pass a list to lead_format
-        # print('This is the formatted lead', formatted_lead)
-        return Response(formatted_lead)  # Return the first item from the list
+    #     # print('The lead bc -   ', lead)
+    #     # Use the same lead_format function
+    #     formatted_lead = lead_format([lead])  # Pass a list to lead_format
+    #     # print('This is the formatted lead', formatted_lead)
+    #     return Response(formatted_lead)  # Return the first item from the list
+    # except Lead.DoesNotExist:
+    #     return Response(
+    #         {"message": "Lead not found"}, 
+    #         status=status.HTTP_404_NOT_FOUND
+    #     )
+    # Get user information
+       # Get user information
+        current_user = request.user
+        is_admin = current_user.is_superuser
+        
+        # Format lead data
+        formatted_lead = lead_format([lead])  
+        
+        # Return lead data with admin status and users
+        return Response({
+            '0': formatted_lead[0],  # Keep existing format
+            'is_admin': is_admin,
+            'users': list(User.objects.all().values('id', 'username'))
+        })
     except Lead.DoesNotExist:
         return Response(
             {"message": "Lead not found"}, 
@@ -705,6 +766,7 @@ def update_lead(request, id):
             arrival_data = request.data.get('arrivalStatus', {})
             basic_data = request.data.get('basicInfo', {})
             overview_data = request.data.get('overview', {})
+            print('ca name bc - ', basic_data['cceName'])
 
             # Update customer
             if customer_data:
@@ -716,24 +778,29 @@ def update_lead(request, id):
                 customer.language_barrier = customer_data.get('languageBarrier', customer.language_barrier)
                 customer.save()
 
-            # status history 18 feb
+            # Replace the existing status history code (around line 773-790) with this:
+            # status history handling
             new_status = arrival_data.get('leadStatus')
+            old_status = lead.lead_status  # Get the previous status
 
-            # Initialize status_history if None
-            if lead.status_history is None:
-                lead.status_history = []
-
-            # Add new status entry regardless if it's same or different
-            if new_status:
+            # Only add to history if there's a new status and it's different from the old one
+            if new_status and new_status != old_status:
+                # Initialize status_history if None
+                if lead.status_history is None:
+                    lead.status_history = []
+                
+                # Add new status entry
                 status_entry = {
                     'status': new_status,
                     'changed_by': request.user.username,
                     'timestamp': timezone.now().astimezone(pytz.timezone('Asia/Kolkata')).isoformat()
                 }
-                if lead.status_history:
-                    lead.status_history.append(status_entry)
-                else:
-                    lead.status_history = [status_entry]
+                
+                lead.status_history.append(status_entry)
+
+            # Get user information
+            current_user = request.user
+            is_admin = current_user.is_superuser
 
             # Update lead fields
             lead.source = customer_data.get('source', lead.source)
@@ -750,12 +817,17 @@ def update_lead(request, id):
             lead.arrival_time = arrival_data.get('dateTime', lead.arrival_time)
             lead.workshop_details = workshop_data
             lead.ca_name = basic_data.get('caName', lead.ca_name)
+            if is_admin:
+                lead.cce_name = basic_data.get('cceName', lead.cce_name)
             lead.products = overview_data.get('tableData', lead.products)
             lead.estimated_price = basic_data.get('total', lead.estimated_price)
             lead.final_amount = arrival_data.get('finalAmount', lead.final_amount)
-            lead.commission_due = arrival_data.get('commissionDue', lead.commission_due)
-            lead.commission_received = arrival_data.get('commissionReceived', lead.commission_received)
-            lead.commission_percent = arrival_data.get('commissionPercent', lead.commission_percent)
+            # lead.commission_due = arrival_data.get('commissionDue', lead.commission_due)
+            # lead.commission_received = arrival_data.get('commissionReceived', lead.commission_received)
+            # lead.commission_percent = arrival_data.get('commissionPercent', lead.commission_percent)
+            lead.commission_due = arrival_data.get('commissionDue', 0) if arrival_data.get('commissionDue') != '' else 0
+            lead.commission_received = arrival_data.get('commissionReceived', 0) if arrival_data.get('commissionReceived') != '' else 0
+            lead.commission_percent = arrival_data.get('commissionPercent', 0) if arrival_data.get('commissionPercent') != '' else 0
             lead.battery_feature = arrival_data.get('batteryFeature', lead.battery_feature)
             lead.additional_work = arrival_data.get('additionalWork', lead.additional_work)
             lead.fuel_status = arrival_data.get('fuelStatus', lead.fuel_status)
@@ -800,10 +872,17 @@ def update_lead(request, id):
                     chasis_no=car_data.get('chasisNo')
                 )
 
-            # Return updated lead data
+            # Return updated lead data with admin status
             formatted_lead = lead_format([lead])[0]
-            return Response(formatted_lead, status=status.HTTP_200_OK)
-
+            
+            
+            print('ca name - ', lead.cce_name)
+            
+            return Response({
+                '0': formatted_lead,  # Keep existing format
+                'is_admin': is_admin,
+                'users': list(User.objects.all().values('id', 'username'))
+            }, status=status.HTTP_200_OK)
         except Lead.DoesNotExist:
             return Response(
                 {"message": "Lead not found"}, 
@@ -1102,7 +1181,7 @@ def update_user_status(request):
     user = request.user
     status = request.data.get('status')
     
-    if status not in ['Active', 'Break', 'offline']:
+    if status not in ['Active', 'Break', 'Lunch', 'Training', 'Meeting', 'offline']:
         return Response({'error': 'Invalid status'}, status=400)
         
     user_status, created = UserStatus.objects.get_or_create(user=user)
