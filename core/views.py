@@ -140,11 +140,32 @@ def home_view(request):
                 .filter(cce_name=current_user.username)\
                 .order_by('-created_at')
 
-        # Calculate statistics for the logged-in user's completed leads
-        user_completed_leads = Lead.objects.filter(
-            profile__user=current_user,
-            lead_status='Completed'  # Assuming 'Completed' is the status value
-        )
+        try:
+            # Get current month start and end dates
+            now = timezone.now()
+            month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            # For month end, get the first day of next month and subtract 1 microsecond
+            if now.month == 12:
+                next_month = now.replace(year=now.year+1, month=1, day=1)
+            else:
+                next_month = now.replace(month=now.month+1, day=1)
+            month_end = next_month - timedelta(microseconds=1)
+
+            # Filter leads by the current month
+            user_completed_leads = Lead.objects.filter(
+                profile__user=current_user,
+                lead_status='Completed',
+                created_at__gte=month_start,
+                created_at__lte=month_end
+            )
+        except Exception as e:
+            # Calculate statistics for the logged-in user's completed leads
+            user_completed_leads = Lead.objects.filter(
+                profile__user=current_user,
+                lead_status='Completed'  # Assuming 'Completed' is the status value
+            )
+            print(f"Error filtering leads by month: {str(e)}")
+
         
         # Total count of completed leads by this user
         total_completed = user_completed_leads.count()
