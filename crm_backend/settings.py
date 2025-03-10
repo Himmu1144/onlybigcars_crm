@@ -32,6 +32,7 @@ DEBUG = False
 # ALLOWED_HOSTS = ['*']
 ALLOWED_HOSTS = [
     '34.131.86.189',
+    'lead.onlybigcars.com',
     # 'localhost',
     'https://bcrm121.web.app',
     'https://bcrm121.firebaseapp.com',
@@ -43,6 +44,7 @@ CORS_ALLOWED_ORIGINS = [
     'https://bcrm121.web.app',
     'https://bcrm121.firebaseapp.com',
     'https://onlybigcars.com',
+    'lead.onlybigcars.com',
 ]
 
 CORS_ALLOW_CREDENTIALS = True
