@@ -217,7 +217,11 @@ def search_leads(request):
             leads = Lead.objects.filter(lead_id__icontains=query)
         else:
             # Search in Customer names
-            leads = Lead.objects.filter(customer__customer_name__icontains=query)
+            # leads = Lead.objects.filter(customer__customer_name__icontains=query)
+            leads = Lead.objects.filter(
+                Q(customer__customer_name__icontains=query) | 
+                Q(car__reg_no__icontains=query)
+            )
     else:
         query = query.strip()
         if (len(query) <= 10):
