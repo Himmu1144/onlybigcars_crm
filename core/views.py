@@ -353,7 +353,7 @@ def edit_form_submit(request):
             
             # Handle existing images
             for image_url in existing_images:
-                path = image_url.replace('https://obc.work.gd', '')
+                path = image_url.replace('http://localhost:8000', '')
                 if path.startswith('/media/'):
                     image_paths.append(path)
             
@@ -1022,7 +1022,7 @@ def update_lead(request, id):
             
             # Handle existing images that were kept
             for image_url in existing_images:
-                path = image_url.replace('https://obc.work.gd', '')
+                path = image_url.replace('http://localhost:8000', '')
                 if path.startswith('/media/'):
                     image_paths.append(path)
             
@@ -1616,6 +1616,27 @@ def get_user_status(request):
         return Response({'status': 'offline'}, status=404)
 
 # ---------------------------------------------------------------------
+
+@api_view(['GET'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def get_customer_previous_leads(request, mobile_number):
+    try:
+        # Get customer
+        customer = Customer.objects.get(mobile_number=mobile_number)
+        
+        # Get all leads for this customer except the current one
+        # Limit to most recent 5 leads
+        leads = Lead.objects.filter(customer=customer).exclude(
+            lead_id=request.GET.get('current_lead', '')
+        ).order_by('-created_at')[:5]
+        
+        # Format leads
+        formatted_leads = lead_format(leads)
+        
+        return Response(formatted_leads)
+    except Customer.DoesNotExist:
+        return Response({'message': 'Customer not found'}, status=404)
 
 
 def generate_order_id(mobile_number):
