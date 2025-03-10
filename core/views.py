@@ -1,4 +1,7 @@
+import json
+import uuid
 from django.shortcuts import render
+from django.conf import settings
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework.authentication import TokenAuthentication
@@ -9,6 +12,7 @@ from django.contrib.auth import login, logout
 from django.contrib.auth.models import User
 from rest_framework import status
 from django.db.models import Q
+import os
 
 from django.db import transaction
 from .models import Customer, Lead, Profile, Order, Car, UserStatus
@@ -24,6 +28,10 @@ from .serializers import GarageSerializer
 from django.utils import timezone
 from datetime import datetime, timedelta
 import pytz
+from django.core.files.storage import default_storage
+import uuid
+# from django.utils import timezone
+# import datetime
 
 
 #  # Custom paginator function
@@ -140,6 +148,12 @@ def home_view(request):
                 .filter(cce_name=current_user.username)\
                 .order_by('-created_at')
 
+        # # Calculate statistics for the logged-in user's completed leads
+        # user_completed_leads = Lead.objects.filter(
+        #     profile__user=current_user,
+        #     lead_status='Completed'  # Assuming 'Completed' is the status value
+        # )
+
         try:
             # Get current month start and end dates
             now = timezone.now()
@@ -169,6 +183,8 @@ def home_view(request):
         
         # Total count of completed leads by this user
         total_completed = user_completed_leads.count()
+
+        print('The toal completed leads are - ', total_completed)
         
         # GMV - Sum of final_amount for all completed leads
         gmv = sum(lead.final_amount or 0 for lead in user_completed_leads)
@@ -218,6 +234,8 @@ def search_leads(request):
         else:
             # Search in Customer names
             # leads = Lead.objects.filter(customer__customer_name__icontains=query)
+            
+            # Search in both customer names and car registration numbers
             leads = Lead.objects.filter(
                 Q(customer__customer_name__icontains=query) | 
                 Q(car__reg_no__icontains=query)
@@ -257,20 +275,125 @@ def search_leads(request):
 def edit_form_submit(request):
     with transaction.atomic():
         try:
-            # Get current user's profile
-            print("Heres the edit page data",request.data)
-            user_profile = Profile.objects.get(user=request.user)
+            print("Processing form submission")
             
-            # Extract data
-            data = request.data
-            table_data = data['overview']['tableData']
-            overview_data = data['overview']
-            customer_data = request.data.get('customerInfo')
-            cars_data = request.data.get('cars', [])
-            location_data = request.data.get('location')
-            workshop_data = request.data.get('workshop')
-            arrival_data = request.data.get('arrivalStatus')
-            basic_data = request.data.get('basicInfo')
+            # Extract JSON data
+            try:
+                json_data = json.loads(request.POST.get('data', '{}'))
+                print("JSON data parsed successfully")
+            except json.JSONDecodeError as e:
+                return Response({"message": f"Invalid JSON data: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Debug top level keys
+            print(f"Top level JSON keys: {json_data.keys()}")
+            
+            # Make a copy of the overview data instead of removing it
+            try:
+                overview_data = json_data.get('overview', {})
+                print(f"Overview data: {overview_data}")
+                
+                # Validate overview data
+                if not isinstance(overview_data, dict):
+                    return Response({"message": "Overview must be an object"}, status=status.HTTP_400_BAD_REQUEST)
+                
+                # Convert numeric fields explicitly to handle potential string values
+                table_data = overview_data.get('tableData', [])
+                total_amount = float(overview_data.get('total', 0))
+                discount = float(overview_data.get('discount', 0))
+                final_amount = float(overview_data.get('finalAmount', 0))
+                
+                # Process table data to ensure consistent types
+                processed_table_data = []
+                for item in table_data:
+                    if not isinstance(item, dict):
+                        continue
+                        
+                    processed_item = {
+                        'type': item.get('type', ''),
+                        'name': item.get('name', ''),
+                        'workdone': item.get('workdone', ''),
+                        'determined': bool(item.get('determined', False)),
+                        'total': float(item.get('total', 0))
+                    }
+                    processed_table_data.append(processed_item)
+                
+            except (ValueError, TypeError) as e:
+                print(f"Error processing overview numeric values: {str(e)}")
+                return Response({"message": f"Error in overview data format: {str(e)}"}, 
+                               status=status.HTTP_400_BAD_REQUEST)
+            except Exception as e:
+                print(f"Error extracting overview data: {str(e)}")
+                return Response({"message": f"Error processing overview data: {str(e)}"}, 
+                               status=status.HTTP_400_BAD_REQUEST)
+            
+            # Extract image files
+            image_files = request.FILES.getlist('images')
+            print(f"Found {len(image_files)} image files")
+            
+            # Process existing images
+            try:
+                existing_images = json.loads(request.POST.get('existing_images', '[]'))
+                print(f"Found {len(existing_images)} existing images")
+            except json.JSONDecodeError:
+                existing_images = []
+                print("Error parsing existing images, using empty list")
+            
+            
+            # Process and save images
+            image_paths = []
+            
+            # Create directory for lead images if it doesn't exist
+            media_root = settings.MEDIA_ROOT
+            leads_dir = os.path.join(media_root, 'leads')
+            if not os.path.exists(leads_dir):
+                os.makedirs(leads_dir)
+                
+            # Generate a unique ID for this submission's images
+            unique_id = str(uuid.uuid4())
+            
+            # Handle existing images
+            for image_url in existing_images:
+                path = image_url.replace('https://obc.work.gd', '')
+                if path.startswith('/media/'):
+                    image_paths.append(path)
+            
+            # Save new images
+            for image_file in image_files:
+                file_path = f"leads/{unique_id}/{image_file.name}"
+                full_path = os.path.join(media_root, file_path)
+                
+                # Create directory if it doesn't exist
+                os.makedirs(os.path.dirname(full_path), exist_ok=True)
+                
+                with open(full_path, 'wb+') as destination:
+                    for chunk in image_file.chunks():
+                        destination.write(chunk)
+                
+                image_paths.append(f"/media/{file_path}")
+            
+            
+            # Replace lines around 376-381 with:
+            customer_data = json_data.get('customerInfo', {})
+            cars_data = json_data.get('cars', [])
+            location_data = json_data.get('location', {})
+            workshop_data = json_data.get('workshop', {})
+            arrival_data = json_data.get('arrivalStatus', {})
+            basic_data = json_data.get('basicInfo', {})
+
+            # Replace the line: user_profile = Profile.objects.get(user=request.user)
+
+            # Try to get profile based on cce_name first
+            cce_name = basic_data.get('cceName')
+            if cce_name:
+                try:
+                    # Look up the profile by username
+                    user_profile = Profile.objects.get(user__username=cce_name)
+                except Profile.DoesNotExist:
+                    # Fall back to current user's profile if cce_name profile doesn't exist
+                    user_profile = Profile.objects.get(user=request.user)
+            else:
+                # Use current user's profile if no cce_name provided
+                user_profile = Profile.objects.get(user=request.user)
 
             # Check if customer exists
             try:
@@ -291,22 +414,41 @@ def edit_form_submit(request):
                     language_barrier=customer_data['languageBarrier']
                 )
 
+           # Around line 300, replace the car creation section with this:
+
             # Save cars
             saved_car = None
             for car_data in cars_data:
-                saved_car = Car.objects.create(
+                # Check if a car with the same key attributes already exists for this customer
+                existing_car = Car.objects.filter(
                     customer=customer,
                     brand=car_data.get('carBrand'),
                     model=car_data.get('carModel'),
                     year=car_data.get('year'),
-                    fuel=car_data.get('fuel'),
-                    variant=car_data.get('variant'),
-                    chasis_no=car_data.get('chasisNo'),
-                    reg_no=car_data.get('regNo')
-                )
-                # Use first car if multiple cars are submitted
-                if not saved_car:
-                    saved_car = saved_car
+                    reg_no=car_data.get('regNo', ''),
+                    chasis_no=car_data.get('chasisNo', '')
+                ).first()
+                
+                if not existing_car:
+                    # Create new car if no match found
+                    saved_car = Car.objects.create(
+                        customer=customer,
+                        brand=car_data.get('carBrand'),
+                        model=car_data.get('carModel'),
+                        year=car_data.get('year'),
+                        fuel=car_data.get('fuel'),
+                        variant=car_data.get('variant'),
+                        chasis_no=car_data.get('chasisNo'),
+                        reg_no=car_data.get('regNo')
+                    )
+                    print(f"Created new car: {saved_car}")
+                
+                # Only use the first car from the array as the lead car
+                break
+
+# Remove this redundant check since we're already setting saved_car above
+# if not saved_car:
+#     saved_car = saved_car
 
              # Generate custom lead ID
             custom_lead_id = generate_custom_lead_id(customer_data['mobileNumber'])
@@ -319,6 +461,8 @@ def edit_form_submit(request):
                 'changed_by': request.user.username,
                 'timestamp': timezone.now().astimezone(pytz.timezone('Asia/Kolkata')).isoformat()
             }] if initial_status else []
+
+            
 
             # Create lead with user's profile
             lead = Lead.objects.create(
@@ -344,6 +488,7 @@ def edit_form_submit(request):
                 discount=overview_data['discount'],
                 afterDiscountAmount=overview_data['finalAmount'],
                 estimated_price=basic_data['total'],
+                images=image_paths,  # Add the image paths
                 # Workshop info
                 workshop_details=workshop_data,
                 ca_name=basic_data['caName'],
@@ -354,6 +499,7 @@ def edit_form_submit(request):
                 # Additional arrival
                 final_amount=arrival_data.get('finalAmount', 0),
                 battery_feature=arrival_data.get('batteryFeature', ''),
+                pending_amount=arrival_data.get('pendingAmount', 0),
                 commission_due=arrival_data.get('commissionDue', 0),
                 commission_received=arrival_data.get('commissionReceived', 0),
                 commission_percent=arrival_data.get('commissionPercent', 0),
@@ -532,6 +678,9 @@ def filter_leads(request):
             # })
             
             statuses = list(query.values_list('lead_status', flat=True).distinct())
+        elif status == 'Converted': 
+            query = query.filter(lead_status__in=[ "Job Card", "Estimate", "Payment Due", "Commision Due", "Completed"])
+            statuses = list(query.values_list('lead_status', flat=True).distinct())
         else:
             print(f"\nApplying status filter for: {status}")
             print("Before status filter count:", query.count())
@@ -541,6 +690,8 @@ def filter_leads(request):
             statuses = list(query.values_list('lead_status', flat=True).distinct())
             print("Statuses in filtered results:", statuses)
         
+        
+
     # Location filter
     if filter_data.get('location'):
         location = filter_data['location']
@@ -731,33 +882,50 @@ def filter_leads(request):
     
     return Response(pagination_data)
 
-
 @api_view(['GET'])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
 def get_lead(request, id):
-    # print('bc aavi gayo')
     try:
         lead = Lead.objects.get(lead_id=id)
         lead.is_read = True
         lead.save()
-    #     # print('The lead bc -   ', lead)
-    #     # Use the same lead_format function
-    #     formatted_lead = lead_format([lead])  # Pass a list to lead_format
-    #     # print('This is the formatted lead', formatted_lead)
-    #     return Response(formatted_lead)  # Return the first item from the list
-    # except Lead.DoesNotExist:
-    #     return Response(
-    #         {"message": "Lead not found"}, 
-    #         status=status.HTTP_404_NOT_FOUND
-    #     )
-    # Get user information
-       # Get user information
+        
+        # Get user information
         current_user = request.user
         is_admin = current_user.is_superuser
         
+        # Get all cars for this customer
+        customer_cars = Car.objects.filter(customer=lead.customer)
+        
         # Format lead data
-        formatted_lead = lead_format([lead])  
+        formatted_lead = lead_format([lead])
+        # Ensure all required fields are present with defaults
+        if not 'overview' in formatted_lead[0]:
+            formatted_lead[0]['overview'] = {
+                'tableData': [],
+                'total': 0,
+                'discount': 0,
+                'finalAmount': 0,
+                'caComments': ''
+            }
+        
+        formatted_lead[0]['customer_cars'] = [
+            {
+                'id': car.id,
+                'carBrand': car.brand,
+                'carModel': car.model,
+                'fuel': car.fuel,
+                'variant': car.variant,
+                'year': car.year,
+                'chasisNo': car.chasis_no,
+                'regNo': car.reg_no
+            } for car in customer_cars
+        ]
+        
+        # Mark the current lead's car
+        if lead.car:
+            formatted_lead[0]['current_car_id'] = lead.car.id
         
         # Return lead data with admin status and users
         return Response({
@@ -779,19 +947,165 @@ def update_lead(request, id):
     with transaction.atomic():
         try:
             lead = Lead.objects.get(lead_id=id)
-            car = lead.car
             print("Updating lead:", id)  # Debug print
-            print("Request data:", request.data)  # Debug print
             
-            # Extract data
-            customer_data = request.data.get('customerInfo', {})
-            cars_data = request.data.get('cars', [])
-            location_data = request.data.get('location', {})
-            workshop_data = request.data.get('workshop', {})
-            arrival_data = request.data.get('arrivalStatus', {})
-            basic_data = request.data.get('basicInfo', {})
-            overview_data = request.data.get('overview', {})
-            print('ca name bc - ', basic_data['cceName'])
+            # Extract JSON data
+            try:
+                json_data = json.loads(request.POST.get('data', '{}'))
+                print("JSON data parsed successfully")
+            except json.JSONDecodeError as e:
+                return Response({"message": f"Invalid JSON data: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Debug print all keys at the top level
+            print(f"Top level JSON keys: {json_data.keys()}")
+            
+            # Process overview data safely
+            try:
+                overview_data = json_data.get('overview', {})
+                print(f"Overview data: {overview_data}")
+                
+                # Convert numeric fields explicitly 
+                table_data = overview_data.get('tableData', [])
+                
+                # Process overview safely
+                if isinstance(overview_data, dict):
+                    # Convert numeric fields with fallbacks
+                    total_amount = float(overview_data.get('total', 0)) if overview_data.get('total') not in (None, '') else 0
+                    discount = float(overview_data.get('discount', 0)) if overview_data.get('discount') not in (None, '') else 0
+                    final_amount = float(overview_data.get('finalAmount', 0)) if overview_data.get('finalAmount') not in (None, '') else 0
+                    
+                    # Process table data safely
+                    if isinstance(table_data, list):
+                        processed_table_data = []
+                        for item in table_data:
+                            if isinstance(item, dict):
+                                processed_item = {
+                                    'type': item.get('type', ''),
+                                    'name': item.get('name', ''),
+                                    'workdone': item.get('workdone', ''),
+                                    'determined': bool(item.get('determined', False)),
+                                    'total': float(item.get('total', 0)) if item.get('total') not in (None, '') else 0
+                                }
+                                processed_table_data.append(processed_item)
+                        table_data = processed_table_data
+                else:
+                    # Default values if overview isn't a dict
+                    overview_data = {}
+                    table_data = []
+                    total_amount = 0
+                    discount = 0 
+                    final_amount = 0
+                
+            except (ValueError, TypeError) as e:
+                print(f"Error processing overview values: {str(e)}")
+                return Response({"message": f"Error in overview data format: {str(e)}"}, 
+                              status=status.HTTP_400_BAD_REQUEST)
+            except Exception as e:
+                print(f"Error extracting overview data: {str(e)}")
+                return Response({"message": f"Error processing overview data: {str(e)}"}, 
+                              status=status.HTTP_400_BAD_REQUEST)
+            
+            # Extract image files
+            image_files = request.FILES.getlist('images')
+            print(f"Found {len(image_files)} image files")
+            
+            # Process existing images
+            try:
+                existing_images = json.loads(request.POST.get('existing_images', '[]'))
+                print(f"Found {len(existing_images)} existing images")
+            except json.JSONDecodeError:
+                existing_images = []
+                print("Error parsing existing images, using empty list")
+            
+            # Process and save images
+            image_paths = []
+            
+            # Handle existing images that were kept
+            for image_url in existing_images:
+                path = image_url.replace('https://obc.work.gd', '')
+                if path.startswith('/media/'):
+                    image_paths.append(path)
+            
+            # Save new uploaded images
+            # Generate a unique ID for this update
+            unique_id = str(uuid.uuid4())
+            
+            # Create directory for lead images if it doesn't exist
+            media_root = settings.MEDIA_ROOT
+            leads_dir = os.path.join(media_root, 'leads')
+            if not os.path.exists(leads_dir):
+                os.makedirs(leads_dir)
+                
+            for image_file in image_files:
+                file_path = f"leads/{unique_id}/{image_file.name}"
+                full_path = os.path.join(media_root, file_path)
+                
+                # Create directory if it doesn't exist
+                os.makedirs(os.path.dirname(full_path), exist_ok=True)
+                
+                with open(full_path, 'wb+') as destination:
+                    for chunk in image_file.chunks():
+                        destination.write(chunk)
+                
+                image_paths.append(f"/media/{file_path}")
+            
+            # Extract other data fields
+            customer_data = json_data.get('customerInfo', {})
+            location_data = json_data.get('location', {})
+            workshop_data = json_data.get('workshop', {})
+            arrival_data = json_data.get('arrivalStatus', {})
+            basic_data = json_data.get('basicInfo', {})
+
+            # In the update_lead view function (around line 1060)
+
+            # Extract car data safely
+            cars_data = json_data.get('cars', [])
+            if cars_data:
+                # Get the first car from the array
+                car_data = cars_data[0]  
+                
+                # Check if a matching car already exists for this customer
+                existing_car = Car.objects.filter(
+                    customer=lead.customer,
+                    brand=car_data.get('carBrand', ''),
+                    model=car_data.get('carModel', ''),
+                    year=car_data.get('year', ''),
+                    reg_no=car_data.get('regNo', ''),
+                    chasis_no=car_data.get('chasisNo', '')
+                ).first()
+                
+                # If car ID is provided and exists, update that specific car
+                if lead.car and car_data.get('id'):
+                    car = Car.objects.get(id=car_data.get('id'))
+                    car.brand = car_data.get('carBrand', car.brand)
+                    car.model = car_data.get('carModel', car.model)
+                    car.year = car_data.get('year', car.year)
+                    car.fuel = car_data.get('fuel', car.fuel)
+                    car.variant = car_data.get('variant', car.variant)
+                    car.chasis_no = car_data.get('chasisNo', car.chasis_no)
+                    car.reg_no = car_data.get('regNo', car.reg_no)
+                    car.save()
+                    lead.car = car
+                # If a matching car exists, use that
+                elif existing_car:
+                    lead.car = existing_car
+                    print(f"Using existing car: {existing_car}")
+                # Otherwise create a new car
+                else:
+                    car = Car.objects.create(
+                        customer=lead.customer,
+                        brand=car_data.get('carBrand', ''),
+                        model=car_data.get('carModel', ''),
+                        year=car_data.get('year', ''),
+                        fuel=car_data.get('fuel', ''),
+                        variant=car_data.get('variant', ''),
+                        chasis_no=car_data.get('chasisNo', ''),
+                        reg_no=car_data.get('regNo', '')
+                    )
+                    lead.car = car
+                    print(f"Created new car: {car}")
+            
+            
 
             # Update customer
             if customer_data:
@@ -827,7 +1141,24 @@ def update_lead(request, id):
             current_user = request.user
             is_admin = current_user.is_superuser
 
+            # Replace the line: user_profile = Profile.objects.get(user=request.user)
+
+            # Try to get profile based on cce_name first
+            cce_name = basic_data.get('cceName')
+            if cce_name:
+                try:
+                    # Look up the profile by username
+                    user_profile = Profile.objects.get(user__username=cce_name)
+                except Profile.DoesNotExist:
+                    # Fall back to current user's profile if cce_name profile doesn't exist
+                    user_profile = Profile.objects.get(user=request.user)
+            else:
+                # Use current user's profile if no cce_name provided
+                user_profile = Profile.objects.get(user=request.user)
+
             # Update lead fields
+            lead.images = image_paths if image_paths else lead.images
+            lead.profile = user_profile
             lead.source = customer_data.get('source', lead.source)
             lead.lead_type = basic_data.get('carType', lead.lead_type)
             lead.address = location_data.get('address', lead.address)
@@ -844,8 +1175,10 @@ def update_lead(request, id):
             lead.ca_name = basic_data.get('caName', lead.ca_name)
             if is_admin:
                 lead.cce_name = basic_data.get('cceName', lead.cce_name)
-            lead.products = overview_data.get('tableData', lead.products)
-            lead.estimated_price = basic_data.get('total', lead.estimated_price)
+            lead.products = table_data
+            lead.estimated_price = basic_data.get('total', total_amount)
+            
+            
             lead.final_amount = arrival_data.get('finalAmount', lead.final_amount)
             # lead.commission_due = arrival_data.get('commissionDue', lead.commission_due)
             # lead.commission_received = arrival_data.get('commissionReceived', lead.commission_received)
@@ -854,12 +1187,13 @@ def update_lead(request, id):
             lead.commission_received = arrival_data.get('commissionReceived', 0) if arrival_data.get('commissionReceived') != '' else 0
             lead.commission_percent = arrival_data.get('commissionPercent', 0) if arrival_data.get('commissionPercent') != '' else 0
             lead.battery_feature = arrival_data.get('batteryFeature', lead.battery_feature)
+            lead.pending_amount = arrival_data.get('pendingAmount', lead.pending_amount)
             lead.additional_work = arrival_data.get('additionalWork', lead.additional_work)
             lead.fuel_status = arrival_data.get('fuelStatus', lead.fuel_status)
             lead.speedometer_rd = arrival_data.get('speedometerRd', lead.speedometer_rd)
             lead.inventory = arrival_data.get('inventory', lead.inventory)
-            lead.discount = overview_data.get('discount', lead.discount)
-            lead.afterDiscountAmount = overview_data.get('finalAmount', lead.afterDiscountAmount)
+            lead.discount = overview_data.get('discount', discount)
+            lead.afterDiscountAmount = overview_data.get('finalAmount', final_amount)
             ist = pytz.timezone('Asia/Kolkata') # 18 feb
             lead.updated_at = timezone.now().astimezone(ist) # 18 feb
             lead.save()
@@ -884,20 +1218,43 @@ def update_lead(request, id):
                 print('Error saving data:', str(e))
 
 
-            if cars_data and car:
-                car_data = cars_data[0]
-                # Update existing car
-                Car.objects.filter(id=car.id).update(
-                    brand=car_data.get('carBrand'),
-                    model=car_data.get('carModel'),
-                    fuel=car_data.get('fuel'),
-                    year=car_data.get('year'),
-                    variant=car_data.get('variant'),
-                    reg_no=car_data.get('regNo'),
-                    chasis_no=car_data.get('chasisNo')
-                )
+            # if cars_data:
+            #     car_data = cars_data[0]
+                
+            #     # Check if a car with identical attributes already exists
+            #     existing_car = Car.objects.filter(
+            #         customer=customer,
+            #         brand=car_data.get('carBrand'),
+            #         model=car_data.get('carModel'),
+            #         year=car_data.get('year'),
+            #         reg_no=car_data.get('regNo', ''),
+            #         chasis_no=car_data.get('chasisNo', '')
+            #     ).exclude(id=car.id if car else 0).first()
+                
+            #     if existing_car:
+            #         # If matching car exists, use that car
+            #         lead.car = existing_car
+            #         lead.save()
+            #         print(f"Updated lead to use existing car: {existing_car}")
+            #     else:
+            #         # Car doesn't exist or details were changed
+            #         # Instead of modifying the existing car, create a new one
+            #         new_car = Car.objects.create(
+            #             customer=customer,
+            #             brand=car_data.get('carBrand'),
+            #             model=car_data.get('carModel'),
+            #             year=car_data.get('year'),
+            #             fuel=car_data.get('fuel'),
+            #             variant=car_data.get('variant'),
+            #             chasis_no=car_data.get('chasisNo'),
+            #             reg_no=car_data.get('regNo')
+            #         )
+            #         lead.car = new_car
+            #         lead.save()
+            #         print(f"Created new car for lead: {new_car}")
+            #             # Return updated lead data with admin status
 
-            # Return updated lead data with admin status
+
             formatted_lead = lead_format([lead])[0]
             
             
@@ -956,15 +1313,26 @@ def lead_format(leads):
         'arrival_mode': lead.arrival_mode or 'NA',
         'disposition': lead.disposition or 'NA',
         'arrival_time': lead.arrival_time if isinstance(lead.arrival_time, str) else lead.arrival_time.isoformat() if lead.arrival_time else '',
+        'images': lead.images or [],
         'products': lead.products or 'NA',
-        'overview': {
+        # 'overview': {
+        #     'tableData': lead.products or [],
+        #     'total': float(lead.estimated_price) if lead.estimated_price else 0,
+        #     'discount': float(lead.discount) if lead.discount is not None else 0,
+        #     'finalAmount': float(lead.afterDiscountAmount) if lead.afterDiscountAmount is not None 
+        #         else float(lead.estimated_price) if lead.estimated_price 
+        #         else 0
+        # },
+         'overview': {
             'tableData': lead.products or [],
             'total': float(lead.estimated_price) if lead.estimated_price else 0,
             'discount': float(lead.discount) if lead.discount is not None else 0,
             'finalAmount': float(lead.afterDiscountAmount) if lead.afterDiscountAmount is not None 
                 else float(lead.estimated_price) if lead.estimated_price 
-                else 0
+                else 0,
+            'caComments': lead.ca_comments or ''
         },
+        
 
 
         'estimated_price': lead.estimated_price or 0,
@@ -977,7 +1345,7 @@ def lead_format(leads):
         'fuel_status': lead.fuel_status or 'NA',
         'speedometer_rd': lead.speedometer_rd or 'NA',
         'inventory': lead.inventory or 'NA',
-
+        'pending_amount': lead.pending_amount or 0,
 
         'workshop_details': {
             'name': lead.workshop_details.get('name') if lead.workshop_details else '',

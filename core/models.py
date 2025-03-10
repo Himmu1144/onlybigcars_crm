@@ -109,6 +109,8 @@ class Lead(models.Model):
     fuel_status = models.CharField(max_length=255, blank=True, null=True)
     speedometer_rd = models.CharField(max_length=255, blank=True, null=True)
     inventory = models.TextField(blank=True, null=True)
+    pending_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    images = models.JSONField(null=True, blank=True)
 
     # Workshop Details
     workshop_details = models.JSONField(null=True, blank=True)
