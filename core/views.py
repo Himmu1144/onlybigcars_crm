@@ -353,7 +353,7 @@ def edit_form_submit(request):
             
             # Handle existing images
             for image_url in existing_images:
-                path = image_url.replace('http://localhost:8000', '')
+                path = image_url.replace('https://obc.work.gd', '')
                 if path.startswith('/media/'):
                     image_paths.append(path)
             
@@ -1022,7 +1022,7 @@ def update_lead(request, id):
             
             # Handle existing images that were kept
             for image_url in existing_images:
-                path = image_url.replace('http://localhost:8000', '')
+                path = image_url.replace('http://obc.work.gd', '')
                 if path.startswith('/media/'):
                     image_paths.append(path)
             
