@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Profile, Customer, Order, Lead, Car, CarBrand, CarModel, UserStatus
+from .models import CallLog, Profile, Customer, Order, Lead, Car, CarBrand, CarModel, UserStatus
 from .models import  CarBrand, CarModel
 from .models import Garage
 
