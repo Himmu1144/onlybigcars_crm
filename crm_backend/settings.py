@@ -44,7 +44,7 @@ CORS_ALLOWED_ORIGINS = [
     'https://bcrm121.web.app',
     'https://bcrm121.firebaseapp.com',
     'https://onlybigcars.com',
-    'lead.onlybigcars.com',
+    'https://lead.onlybigcars.com',
 ]
 
 CORS_ALLOW_CREDENTIALS = True
