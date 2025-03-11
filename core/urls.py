@@ -17,4 +17,5 @@ urlpatterns = [
     path('api/user-status/', views.get_user_status, name='get_user_status'),
     path('api/customers/<str:mobile_number>/', views.get_customer_by_mobile, name='get_customer_by_mobile'),#18-2
     path('api/customers/<str:mobile_number>/leads/', views.get_customer_previous_leads, name='customer_previous_leads'),#04-03
+    path('api/callerdesk-webhook/', views.callerdesk_webhook, name='callerdesk_webhook'),
 ]

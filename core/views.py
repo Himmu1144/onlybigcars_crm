@@ -30,6 +30,7 @@ from datetime import datetime, timedelta
 import pytz
 from django.core.files.storage import default_storage
 import uuid
+from django.views.decorators.csrf import csrf_exempt
 # from django.utils import timezone
 # import datetime
 
@@ -1405,6 +1406,70 @@ def generate_custom_lead_id(customer_number):
     # Format lead ID
     lead_id = f"L-{customer_number}-{seq_num}"
     return lead_id
+
+
+
+@api_view(['GET'])
+@csrf_exempt
+def callerdesk_webhook(request):
+    """
+    Endpoint to receive webhook data from CallerDesk
+    """
+    try:
+        # Extract data from the query parameters
+        call_data = {
+            'source_number': request.GET.get('SourceNumber'),
+            'destination_number': request.GET.get('DestinationNumber'),
+            'dial_whom_number': request.GET.get('DialWhomNumber'),
+            'call_duration': request.GET.get('CallDuration'),
+            'coins': request.GET.get('coins'),
+            'status': request.GET.get('Status'),
+            'start_time': request.GET.get('StartTime'),
+            'end_time': request.GET.get('EndTime'),
+            'call_sid': request.GET.get('CallSid'),
+            'call_recording_url': request.GET.get('CallRecordingUrl'),
+            'direction': request.GET.get('Direction'),
+            'camp_id': request.GET.get('campid'),
+            'talk_duration': request.GET.get('TalkDuration')
+        }
+        
+        # Log the received data
+        print("CallerDesk Webhook Data Received:", call_data)
+
+         # Create a CallLog record to store incoming calls
+        try:
+            # Find customer by phone number if exists
+            customer = None
+            if call_data['source_number']:
+                customer = Customer.objects.filter(mobile_number=call_data['source_number']).first()
+                
+            # Create call log
+            CallLog.objects.create(
+                customer=customer,
+                call_sid=call_data['call_sid'] or '',
+                source_number=call_data['source_number'] or '',
+                destination_number=call_data['destination_number'] or '',
+                status=call_data['status'] or ''
+            )
+        except Exception as log_error:
+            print(f"Error saving call log: {str(log_error)}")
+        
+        
+
+        
+        return Response({
+            'status': 'success',
+            'message': 'Webhook data received successfully',
+            'data': call_data
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        print(f"Error processing webhook: {str(e)}")
+        return Response({
+            'status': 'error',
+            'message': str(e)
+        }, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 @api_view(['POST'])

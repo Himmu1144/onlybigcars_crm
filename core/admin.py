@@ -93,3 +93,13 @@ class GarageAdmin(admin.ModelAdmin):
     search_fields = ('name', 'mechanic', 'locality', 'mobile')
     ordering = ('-created_at',)
     list_per_page = 20
+
+
+@admin.register(CallLog)
+class CallLogAdmin(admin.ModelAdmin):
+    list_display = ['call_sid', 'source_number', 'destination_number', 'status', 'customer', 'created_at']
+    search_fields = ['call_sid', 'source_number', 'destination_number']
+    list_filter = ['status', 'created_at']
+    date_hierarchy = 'created_at'  # If you have a created_at field, otherwise remove this line
+    ordering = ('-created_at',)    # Newest calls first
+    list_per_page = 50            # Show 50 calls per page
