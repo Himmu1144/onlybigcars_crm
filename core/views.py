@@ -15,7 +15,7 @@ from django.db.models import Q
 import os
 
 from django.db import transaction
-from .models import Customer, Lead, Profile, Order, Car, UserStatus
+from .models import CallLog, Customer, Lead, Profile, Order, Car, UserStatus
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.db.models import Count
 
@@ -1438,10 +1438,12 @@ def callerdesk_webhook(request):
 
          # Create a CallLog record to store incoming calls
         try:
-            # Find customer by phone number if exists
             customer = None
             if call_data['source_number']:
-                customer = Customer.objects.filter(mobile_number=call_data['source_number']).first()
+                customer, created = Customer.objects.get_or_create(
+                    mobile_number=call_data['source_number'],
+                    defaults={'customer_name': 'New Customer'}
+                )
                 
             # Create call log
             CallLog.objects.create(
@@ -1761,3 +1763,310 @@ def get_customer_by_mobile(request, mobile_number):
         return Response(data)
     except Customer.DoesNotExist:
         return Response({'message': 'Customer not found'}, status=404)
+
+@api_view(['POST'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def export_filter_leads(request):
+    filter_data = request.data
+    
+    # Start with base queryset with all related fields
+    query = Lead.objects.select_related(
+        'customer', 
+        'car', 
+        'profile', 
+        'profile__user', 
+        'order'
+    ).all()
+
+    # Replace the existing garage filter code with this
+    if filter_data.get('garage'):
+        garage_names = filter_data['garage']
+        print(f"\nApplying garage filter for: {garage_names}")
+        print("Before garage filter count:", query.count())
+
+        if isinstance(garage_names, list) and garage_names:
+            garage_q = Q()
+            for name in garage_names:
+                # Build OR conditions for each garage name
+                garage_q |= Q(workshop_details__name=name)
+            query = query.filter(garage_q)
+        elif garage_names:  # Single string value
+            query = query.filter(workshop_details__name=garage_names)
+
+        print("After garage filter count:", query.count())
+    
+    print("\n=== FILTER DEBUGGING START ===")
+    print(f"Initial query count: {query.count()}")
+    print(f"Filter data received: {filter_data}")
+    
+    # User filter
+    if filter_data.get('user'):
+        username = filter_data['user']
+        print(f"\nApplying user filter for: {username}")
+        print("Before user filter count:", query.count())
+        print("Current usernames in query:", list(query.values_list('profile__user__username', flat=True).distinct()))
+        
+        query = query.filter(profile__user__username=username)
+        print("After user filter count:", query.count())
+        filtered_usernames = list(query.values_list('profile__user__username', flat=True).distinct())
+        print("Usernames after filter:", filtered_usernames)
+        if username not in filtered_usernames:
+            print(f"WARNING: Username {username} not found in filtered results!")
+    
+    # Source filter
+    if filter_data.get('source'):
+        source = filter_data['source']
+        print(f"\nApplying source filter for: {source}")
+        print("Before source filter count:", query.count())
+        query = query.filter(source=source)
+        print("After source filter count:", query.count())
+        sources = list(query.values_list('source', flat=True).distinct())
+        print("Sources in filtered results:", sources)
+    
+    # Status filter
+    if filter_data.get('status'):
+        status = filter_data['status']
+        if status == 'Analytics':
+            print('Stats Status Selected')
+            query = query.filter(lead_status__in=['Completed', 'Commision Due'])
+            statuses = list(query.values_list('lead_status', flat=True).distinct())
+        else:
+            print(f"\nApplying status filter for: {status}")
+            print("Before status filter count:", query.count())
+            query = query.filter(lead_status=status)
+            print("After status filter count:", query.count())
+            statuses = list(query.values_list('lead_status', flat=True).distinct())
+            print("Statuses in filtered results:", statuses)
+        
+    # Location filter
+    if filter_data.get('location'):
+        location = filter_data['location']
+        print(f"\nApplying location filter for: {location}")
+        print("Before location filter count:", query.count())
+        # Special case for Bangalore/Bengaluru
+        if location == 'Bangalore':
+            query = query.filter(Q(city='Bangalore') | Q(city='Bengaluru')) #28-2
+        else:
+            query = query.filter(city=location)
+        print("After location filter count:", query.count())
+        cities = list(query.values_list('city', flat=True).distinct())
+        print("Cities in filtered results:", cities)
+    
+    # Language barrier filter
+    if filter_data.get('language_barrier'):
+        print("\nApplying language barrier filter")
+        print("Before language barrier filter count:", query.count())
+        query = query.filter(customer__language_barrier=True)
+        print("After language barrier filter count:", query.count())
+    
+    # Arrival mode filter
+    if filter_data.get('arrivalMode'):
+        mode = filter_data['arrivalMode']
+        print(f"\nApplying arrival mode filter for: {mode}")
+        print("Before arrival mode filter count:", query.count())
+        query = query.filter(arrival_mode=mode)
+        print("After arrival mode filter count:", query.count())
+    
+    # Date range filter
+    if filter_data.get('dateRange'):
+        start_date = filter_data['dateRange'].get('startDate')
+        end_date = filter_data['dateRange'].get('endDate')
+        
+        if start_date and end_date:
+            print("\n=== DATE RANGE FILTER DEBUGGING ===")
+            print(f"Input dates: start={start_date}, end={end_date}")
+            print(f"Before filter - Total leads: {query.count()}")
+            
+            try:
+                if start_date == end_date:
+                    print(f"\n*** Both dates are same: {start_date} ***")
+                    # Use __date lookup to filter by exact date without time
+                    start_dt = datetime.strptime(start_date, '%Y-%m-%d') + timedelta(days=1)
+                    query = query.filter(created_at__date=start_dt)
+                    print(f"After single day filter - Total leads: {query.count()}")
+                    
+                    # Debug sample results for single day
+                    sample_leads = query.values('lead_id', 'created_at')[:5]
+                    print("\nSample leads for single day:")
+                    for lead in sample_leads:
+                        print(f"Lead ID: {lead['lead_id']}, Created: {lead['created_at']}")
+
+                else:
+                    # Convert and log datetime objects
+                    start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+                    end_dt = datetime.strptime(end_date, '%Y-%m-%d')
+                    print(f"\nInitial datetime objects:")
+                    print(f"start_dt: {start_dt}")
+                    print(f"end_dt: {end_dt}")
+                    
+                    # Add one day to end date and set time bounds
+                    end_dt = end_dt + timedelta(days=1)
+                    start_dt = start_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+                    end_dt = end_dt.replace(hour=23, minute=59, second=59, microsecond=999999)
+                    print(f"\nAdjusted datetime objects:")
+                    print(f"start_dt: {start_dt}")
+                    print(f"end_dt: {end_dt}")
+                    
+                    # Make timezone aware
+                    ist = pytz.timezone('Asia/Kolkata')
+                    start_dt = timezone.make_aware(start_dt, ist)
+                    end_dt = timezone.make_aware(end_dt, ist)
+                    print(f"\nTimezone aware datetime objects (IST):")
+                    print(f"start_dt: {start_dt}")
+                    print(f"end_dt: {end_dt}")
+                    
+                    # Apply filter
+                    query = query.filter(created_at_gte=start_dt, created_at_lte=end_dt)
+                    print(f"\nAfter date range filter - Total leads: {query.count()}")
+                    
+                    # Debug sample results for date range
+                    sample_leads = query.values('lead_id', 'created_at')[:5]
+                    print("\nSample leads for date range:")
+                    for lead in sample_leads:
+                        print(f"Lead ID: {lead['lead_id']}, Created: {lead['created_at']}")
+                
+            except ValueError as e:
+                print(f"\nERROR: Date parsing failed - {str(e)}")
+                return Response({
+                    'error': f'Invalid date format: {str(e)}. Please use YYYY-MM-DD format.'
+                }, status=400)
+            except Exception as e:
+                print(f"\nERROR: Unexpected error in date filtering - {str(e)}")
+                return Response({
+                    'error': f'Date filtering error: {str(e)}'
+                }, status=400)
+            finally:
+                print("=== END DATE RANGE FILTER DEBUGGING ===\n")
+
+    # Car type filter
+    if filter_data.get('luxuryNormal'):
+        car_type = filter_data['luxuryNormal']
+        print(f"\nApplying car type filter for: {car_type}")
+        print("Before car type filter count:", query.count())
+        query = query.filter(lead_type=car_type)
+        print("After car type filter count:", query.count())
+    
+    # Final ordering
+    print("\nApplying final ordering")
+    leads = query.order_by('-created_at')
+    
+    # Calculate the required values
+    total_leads = leads.count()
+    total_estimated_price = sum(lead.afterDiscountAmount if lead.afterDiscountAmount else lead.estimated_price or 0 for lead in leads)
+    total_final_amount = sum(lead.final_amount or 0 for lead in leads)
+
+    # Calculate per lead values
+    est_price_per_lead = total_estimated_price / total_leads if total_leads > 0 else 0
+    final_amount_per_lead = total_final_amount / total_leads if total_leads > 0 else 0
+
+    # Double-check the filtering
+    print("\nVerifying final filtered results:")
+    print(f"Total leads after all filters: {total_leads}")
+    unique_users = leads.values_list('profile__user__username', flat=True).distinct()
+    print(f"Unique users in filtered results: {list(unique_users)}")
+    print("this is function export_filter_leads")
+
+    # Format all leads instead of paginating
+    formatted_leads = lead_format(leads)
+    
+    # Prepare response data with all leads and stats
+    response_data = {
+        'leads': formatted_leads,
+        'total_leads': total_leads,
+        'total_estimated_price': total_estimated_price,
+        'est_price_per_lead': est_price_per_lead,
+        'total_final_amount': total_final_amount,
+        'final_amount_per_lead': final_amount_per_lead
+    }
+
+    # Add commission stats if applicable
+    if filter_data.get('status') == 'Analytics':
+        total_commission_due = sum(lead.commission_due or 0 for lead in query)
+        total_commission_received = sum(lead.commission_received or 0 for lead in query)
+        
+        response_data.update({
+            'commission_stats': {
+                'total_commission_due': total_commission_due,
+                'total_commission_received': total_commission_received,
+            }
+        })
+    
+    return Response(response_data)
+
+@api_view(['GET'])
+def export_search_leads(request):
+    query = request.GET.get('query', '').strip()
+    leads = []
+
+    # Check if query is string or number
+    if query.isalpha() or (len(query) > 0 and not query.isnumeric()):
+        if query.upper().startswith('L'):
+            # Search in Lead IDs
+            leads = Lead.objects.filter(lead_id__icontains=query)
+        else:
+            # Search in both customer names and car registration numbers
+            leads = Lead.objects.filter(
+                Q(customer_customer_name_icontains=query) | 
+                Q(car_reg_no_icontains=query)
+            )
+    else:
+        query = query.strip()
+        if (len(query) <= 10):
+            leads = Lead.objects.filter(customer_mobile_number_icontains=query)
+        else:
+            leads = Lead.objects.filter(order_order_id_icontains=query)
+        
+    # Get current logged in user
+    current_user = request.user
+    is_admin = current_user.is_superuser
+    # Filter leads based on admin status
+    if not is_admin:
+        # Non-admins can only see their own leads
+        leads = leads.filter(cce_name=current_user.username)
+    
+    # Format all leads (no pagination)
+    leads_data = lead_format(leads)
+    
+    return Response({
+        "message": "Search Results for Export",
+        "leads": leads_data,
+        "total_count": len(leads_data),
+        "is_admin": is_admin,
+        "current_username": current_user.username,
+    })
+
+
+@api_view(['GET'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def export_leads(request):
+    """Export all leads or leads matching a search query (GET parameters)."""
+    try:
+        search_query = request.GET.get('query', '')
+        if search_query:
+            query = Lead.objects.filter(
+                Q(lead_id__icontains=search_query) |
+                Q(customer_customer_name_icontains=search_query) |
+                Q(customer_mobile_number_icontains=search_query) |
+                Q(car_reg_no_icontains=search_query) |
+                Q(order_order_id_icontains=search_query)
+            )
+        else:
+            query = Lead.objects.select_related('customer', 'car', 'profile', 'order').all()
+
+        current_user = request.user
+        if not current_user.is_superuser:
+            query = query.filter(cce_name=current_user.username)
+
+        leads = query.order_by('-created_at')
+        leads_data = lead_format(leads)
+
+        return Response({
+            "leads": leads_data,
+            "total_count": len(leads_data)
+        })
+
+    except Exception as e:
+        print(f"Error in export_leads: {str(e)}")  # Add detailed logging
+        return Response({"message": str(e)}, status=status.HTTP_400_BAD_REQUEST)

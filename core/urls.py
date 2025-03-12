@@ -18,4 +18,7 @@ urlpatterns = [
     path('api/customers/<str:mobile_number>/', views.get_customer_by_mobile, name='get_customer_by_mobile'),#18-2
     path('api/customers/<str:mobile_number>/leads/', views.get_customer_previous_leads, name='customer_previous_leads'),#04-03
     path('api/callerdesk-webhook/', views.callerdesk_webhook, name='callerdesk_webhook'),
+    path('api/leads/export/filter/', views.export_filter_leads, name='export_filter_leads'),  # For POST with filters 06-03
+    path('api/leads/export/search/', views.export_search_leads, name='export_search_leads'),  # For POST with filters 06-03
+    path('api/leads/export/', views.export_leads, name='export_leads'),
 ]
