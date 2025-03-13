@@ -21,7 +21,7 @@ class CarModelAdmin(admin.ModelAdmin):
 # 18 feb
 @admin.register(Profile)
 class ProfileAdmin(admin.ModelAdmin):
-    list_display = ['user', 'status', 'is_caller']
+    list_display = ['user', 'status', 'is_caller', 'number']
     search_fields = ['user__username', 'status']
     list_filter = ['status','is_caller']
 
