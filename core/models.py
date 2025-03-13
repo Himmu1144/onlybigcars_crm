@@ -6,6 +6,7 @@ class Profile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     status = models.CharField(max_length=100, null=True, blank=True)
     is_caller = models.BooleanField(default=False) # 18feb
+    number = models.CharField(max_length=15, null=True, blank=True)
     # leads = models.ManyToManyField('Lead', blank=True, related_name='assigned_profiles')
     # orders = models.ManyToManyField('Order', blank=True, related_name='assigned_profiles')
     

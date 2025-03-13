@@ -1407,8 +1407,6 @@ def generate_custom_lead_id(customer_number):
     lead_id = f"L-{customer_number}-{seq_num}"
     return lead_id
 
-
-
 @api_view(['GET'])
 @csrf_exempt
 def callerdesk_webhook(request):
@@ -1436,7 +1434,7 @@ def callerdesk_webhook(request):
         # Log the received data
         print("CallerDesk Webhook Data Received:", call_data)
 
-         # Create a CallLog record to store incoming calls
+        # Create a CallLog record to store incoming calls
         try:
             customer = None
             if call_data['source_number']:
@@ -1462,11 +1460,75 @@ def callerdesk_webhook(request):
                 start_time=call_data.get('start_time'),
                 end_time=call_data.get('end_time')
             )
-        except Exception as log_error:
-            print(f"Error saving call log: {str(log_error)}")
-        
-        
 
+            print('call log created ', call_data['source_number'])
+            
+            # Check if there's a profile with the dial_whom_number
+            dial_whom_number = call_data.get('dial_whom_number')
+            assigned_profile = None
+            
+            if dial_whom_number:
+                # Try to find a profile with matching number who is a caller
+                assigned_profile = Profile.objects.filter(
+                    number=dial_whom_number,
+                    is_caller=True
+                ).first()
+                
+                if assigned_profile:
+                    print(f"Found matching profile for dial_whom_number: {assigned_profile.user.username}")
+            
+            # If no matching profile found, fall back to least busy active caller
+            if not assigned_profile:
+                profiles = Profile.objects.filter(is_caller=True).annotate(
+                    lead_count=Count('profile_leads')
+                ).order_by('lead_count')
+                
+                # Filter active profiles
+                active_profiles = profiles.filter(user__userstatus__status='Active')
+                
+                if active_profiles.exists():
+                    print("\n--- Active Profiles with Lead Counts ---")
+                    for profile in active_profiles:
+                        print(f"Profile: {profile.user.username}, Lead Count: {profile.lead_count}")
+                    assigned_profile = active_profiles.first()
+                else:
+                    print("\n--- No Active Profiles Found, Using All Profiles ---")
+                    for profile in profiles:
+                        print(f"Profile: {profile.user.username}, Lead Count: {profile.lead_count}")
+                    assigned_profile = profiles.first()
+
+            if assigned_profile:
+                print(f"\n--- Assigned Profile ---")
+                print(f"Username: {assigned_profile.user.username}")
+                
+                # Generate custom lead ID
+                custom_lead_id = generate_custom_lead_id(customer.mobile_number)
+                
+                # Create dummy data for required fields
+                dummy_table_data = [{"name": "Service Name", "type": "Service Type", "total": "0", "workdone": "wordone", "determined": False}]
+                
+                try:
+                    print('Creating lead')
+                    # Create lead with available data
+                    lead = Lead.objects.create(
+                        lead_id=custom_lead_id,
+                        customer=customer,
+                        profile=assigned_profile,
+                        source='CallerDesk Call',
+                        products=dummy_table_data,
+                        estimated_price=0,
+                        lead_status='Assigned',
+                        cce_name=assigned_profile.user.username,
+                        is_read=False
+                    )
+                    print(f"Created new lead from call: {lead.lead_id}")
+                except Exception as e:
+                    print('Error creating lead:', str(e))
+            else:
+                print("No profile available to assign the lead to")
+
+        except Exception as log_error:
+            print(f"Error saving call log or creating lead: {str(log_error)}")
         
         return Response({
             'status': 'success',
@@ -1482,6 +1544,32 @@ def callerdesk_webhook(request):
         }, status=status.HTTP_400_BAD_REQUEST)
 
 
+@api_view(['GET'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def recent_calls(request):
+    """Get the most recent call for notification purposes"""
+    user = request.user
+
+    print('INterval call to fetch lead')
+    
+    # Get the most recent lead from a call
+    recent_lead = Lead.objects.filter(
+        source='CallerDesk Call',
+        is_read=False
+    ).order_by('-created_at').first()
+    
+    if recent_lead:
+        return Response({
+            'lead_id': recent_lead.lead_id,
+            'source_number': recent_lead.customer.mobile_number if recent_lead.customer else '',
+            'working':'yup',
+        })
+    else:
+        return Response({
+            'lead_id': None,
+            'source_number': None
+        })
 
 @api_view(['POST'])
 def create_lead_from_wordpress(request):

@@ -21,4 +21,5 @@ urlpatterns = [
     path('api/leads/export/filter/', views.export_filter_leads, name='export_filter_leads'),  # For POST with filters 06-03
     path('api/leads/export/search/', views.export_search_leads, name='export_search_leads'),  # For POST with filters 06-03
     path('api/leads/export/', views.export_leads, name='export_leads'),
+    path('api/recent-calls/', views.recent_calls, name='recent_calls'),
 ]
