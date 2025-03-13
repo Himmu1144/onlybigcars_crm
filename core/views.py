@@ -1448,10 +1448,19 @@ def callerdesk_webhook(request):
             # Create call log
             CallLog.objects.create(
                 customer=customer,
-                call_sid=call_data['call_sid'] or '',
-                source_number=call_data['source_number'] or '',
-                destination_number=call_data['destination_number'] or '',
-                status=call_data['status'] or ''
+                call_sid=call_data.get('call_sid', ''),
+                source_number=call_data.get('source_number', ''),
+                destination_number=call_data.get('destination_number', ''),
+                dial_whom_number=call_data.get('dial_whom_number', ''),
+                status=call_data.get('status', ''),
+                call_duration=call_data.get('call_duration', ''),
+                coins=call_data.get('coins', ''),
+                talk_duration=call_data.get('talk_duration', ''),
+                direction=call_data.get('direction', ''),
+                camp_id=call_data.get('camp_id', ''),
+                recording_url=call_data.get('call_recording_url', ''),
+                start_time=call_data.get('start_time'),
+                end_time=call_data.get('end_time')
             )
         except Exception as log_error:
             print(f"Error saving call log: {str(log_error)}")

@@ -97,8 +97,8 @@ class GarageAdmin(admin.ModelAdmin):
 
 @admin.register(CallLog)
 class CallLogAdmin(admin.ModelAdmin):
-    list_display = ['call_sid', 'source_number', 'destination_number', 'status', 'customer', 'created_at']
-    search_fields = ['call_sid', 'source_number', 'destination_number']
+    list_display = ['call_sid', 'source_number', 'dial_whom_number', 'status', 'customer', 'created_at']
+    search_fields = ['call_sid', 'source_number', 'dial_whom_number']
     list_filter = ['status', 'created_at']
     date_hierarchy = 'created_at'  # If you have a created_at field, otherwise remove this line
     ordering = ('-created_at',)    # Newest calls first
